@@ -174,6 +174,28 @@
   .ratio b{color:var(--text)}
   .cmp-empty{color:var(--muted-2); font-size:var(--fs-sm); line-height:1.6}
 
+  /* ---- 기간별 추이 ---- */
+  .hist{border-top:1px solid var(--line-weak); padding:14px 20px}
+  .hist-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; flex-wrap:wrap}
+  .hist-tabs{display:flex; gap:4px}
+  .hist-tabs button{border:1px solid var(--line); background:var(--panel); color:var(--muted);
+    border-radius:5px; padding:4px 10px; font-size:var(--fs-xs); font-weight:700; cursor:pointer; font-family:var(--sans)}
+  .hist-tabs button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+  .hist-body{display:grid; grid-template-columns:1fr 240px; gap:18px; align-items:start}
+  .hist-tab{width:100%; border-collapse:collapse; font-size:var(--fs-xs)}
+  .hist-tab th{color:var(--muted); font-weight:700; text-align:right; padding:5px 6px; border-bottom:1px solid var(--line-weak); white-space:nowrap}
+  .hist-tab th:first-child{text-align:left}
+  .hist-tab td{text-align:right; padding:6px; border-bottom:1px solid var(--line-weak);
+    font-family:var(--mono,var(--sans)); font-weight:700; white-space:nowrap}
+  .hist-tab td:first-child{text-align:left; color:var(--muted); font-weight:700; font-family:var(--sans)}
+  .hist-tab tr:last-child td{border-bottom:0}
+  .hist-range{background:var(--panel-2); border:1px solid var(--line-weak); border-radius:6px; padding:10px 12px}
+  .hr-spark{color:var(--accent); height:38px; margin-bottom:6px}
+  .hr-spark svg{display:block; width:100%; height:38px; overflow:visible}
+  .hr-pos{font-size:var(--fs-xs); font-weight:800; text-align:center; margin-bottom:6px; overflow-wrap:anywhere}
+  .hr-info{display:flex; justify-content:space-between; gap:8px; font-size:var(--fs-xs); color:var(--muted)}
+  .hr-info b{color:var(--text)}
+
   /* ---- 교환 시뮬레이션 ---- */
   .swap{border-top:1px solid var(--line-weak); padding:14px 20px 18px}
   .swap-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; flex-wrap:wrap}
@@ -309,6 +331,7 @@
     .cmp-grid{grid-template-columns:1fr}
     .cmp-side + .cmp-mid, .cmp-mid + .cmp-side{border-left:0; border-top:1px solid var(--line-weak)}
     /* 세로 배치에서는 교환 방향 화살표도 아래를 향한다 */
+    .hist-body{grid-template-columns:1fr; gap:12px}
     .swap-body{grid-template-columns:1fr; gap:10px}
     .swap-dir{margin:0 auto; transform:rotate(90deg)}
     .swap-dir:hover{transform:rotate(270deg)}
@@ -577,6 +600,37 @@
         </div>
       </div>
 
+      <!-- 기간별 추이 — 지금 교환비가 최근 범위의 어디쯤인지가 진입 판단의 근거 -->
+      <div class="hist">
+        <div class="hist-head">
+          <span class="swap-title">기간별 추이</span>
+          <div class="hist-tabs" id="histTabs">
+            <button type="button" data-p="1D" class="on">1일</button>
+            <button type="button" data-p="1W">1주</button>
+            <button type="button" data-p="1M">1개월</button>
+          </div>
+        </div>
+        <div class="cmp-empty swap-empty" id="histEmpty">A·B를 모두 고르면 기간별 격차를 계산합니다</div>
+        <div class="hist-body" id="histBody" hidden>
+          <table class="hist-tab">
+            <thead><tr><th></th><th id="hcA">A</th><th id="hcB">B</th><th id="hcR">교환비</th></tr></thead>
+            <tbody>
+              <tr><td>시작</td><td id="hsA">—</td><td id="hsB">—</td><td id="hsR">—</td></tr>
+              <tr><td>현재</td><td id="hnA">—</td><td id="hnB">—</td><td id="hnR">—</td></tr>
+              <tr><td>변동</td><td id="hdA">—</td><td id="hdB">—</td><td id="hdR">—</td></tr>
+            </tbody>
+          </table>
+          <div class="hist-range">
+            <div class="hr-spark num" id="hrSpark"></div>
+            <div class="hr-pos" id="hrPos">—</div>
+            <div class="hr-info num">
+              <span>최저 <b id="hrLo">—</b></span>
+              <span>최고 <b id="hrHi">—</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 교환 시뮬레이션 — A/B를 실제로 갈아탄다면 몇 개가 되는지 -->
       <div class="swap">
         <div class="swap-head">
@@ -791,6 +845,7 @@ const state = {
   selA: null, selB: null,
   swapQty: '', swapDir: 'ab', swapPct: 100,   // 교환 시뮬레이션: 보유 수량 / 방향(ab = A를 팔아 B를 삼) / 교환 비율
   roundRatio: '',                             // 왕복: 되돌아올 때의 교환비
+  histPeriod: '1D',                           // 기간별 추이 구간
   detail: null,      // 상세 패널에 표시할 마켓 (UI 전용 — 행 클릭)
   chartPeriod: '1D', // 1D | 1W | 1M
   // --- 알림/이상거래 감지 ---
@@ -1290,6 +1345,7 @@ function updateCompare(){
   const mid = document.getElementById('cmpMid');
   if(!ta || !tb){
     mid.innerHTML = '<div class="cmp-empty">A·B를 고르면<br>가격 차이·배수·환산이 표시됩니다</div>';
+    updateSwap();        // 선택이 풀리면 교환·왕복 패널도 함께 닫는다
     return;
   }
   const pa = ta.trade_price, pb = tb.trade_price;
@@ -1304,7 +1360,89 @@ function updateCompare(){
       ${ma.base}는 ${mb.base}의 <b>${ratio>=1?ratio.toLocaleString('en-US',{maximumFractionDigits:2}):ratio.toLocaleString('en-US',{maximumFractionDigits:4})}배</b><br>
       1 ${mb.base} = ${(pb/pa>=1?(pb/pa).toFixed(2):(pb/pa).toFixed(4))} ${ma.base}
     </div>`;
+  renderHist();   // 실시간 시세로 '현재' 행과 위치를 갱신 (캔들은 캐시 재사용)
   updateSwap();
+}
+
+/* ---------- 기간별 추이 ----------
+   두 코인의 절대 가격보다 '교환비(1 A = ? B)'가 기간 내 어디쯤인지가 중요하다.
+   비율이 높을수록 A가 B 대비 비싸므로 A→B로 갈아탈 자리이고, 낮을수록 그 반대다. */
+let histData = null, histReqId = 0;
+function sparkline(vals){
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
+  const W = 100, H = 38;
+  const pts = vals.map((v,i)=>`${(i/(vals.length-1)*W).toFixed(2)},${(H-(v-lo)/span*H).toFixed(2)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`
+       + `<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg>`;
+}
+async function loadPairHistory(){
+  const a = state.selA, b = state.selB, p = state.histPeriod;
+  const empty = document.getElementById('histEmpty'), body = document.getElementById('histBody');
+  if(!empty) return;
+  if(!a || !b){
+    histData = null; body.hidden = true; empty.hidden = false;
+    empty.textContent = 'A·B를 모두 고르면 기간별 격차를 계산합니다';
+    return;
+  }
+  const key = `${a}|${b}|${p}`;
+  if(histData && histData.key === key){ renderHist(); return; }
+  const rid = ++histReqId;
+  body.hidden = true; empty.hidden = false; empty.textContent = '기간 데이터를 불러오는 중…';
+  const url = mk => p==='1D' ? `${REST}/candles/minutes/60?market=${mk}&count=24`
+                  : p==='1W' ? `${REST}/candles/days?market=${mk}&count=7`
+                  :            `${REST}/candles/days?market=${mk}&count=30`;
+  try{
+    // 두 요청을 동시에 쏘면 초당 할당량에 걸린다 — 간격을 두고 순차 호출
+    const ca = await fetchUpbit(url(a), 2);
+    await sleep(250);
+    const cb = await fetchUpbit(url(b), 2);
+    if(rid !== histReqId) return;                       // 그사이 코인/기간이 바뀌면 폐기
+    const mapB = new Map(cb.map(c => [c.candle_date_time_utc, c.trade_price]));
+    const series = [];
+    for(const c of ca){                                  // 거래가 없어 빠진 구간은 제외
+      const pb = mapB.get(c.candle_date_time_utc);
+      if(pb > 0) series.push({ a:c.trade_price, b:pb, r:c.trade_price/pb });
+    }
+    series.reverse();                                    // 최신순 → 과거→현재
+    if(series.length < 2) throw new Error('empty');
+    histData = { key, series };
+    renderHist();
+  }catch(e){
+    if(rid !== histReqId) return;
+    histData = null; body.hidden = true; empty.hidden = false;
+    empty.textContent = '기간 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+}
+function renderHist(){
+  const ta = state.selA ? state.data[state.selA] : null;
+  const tb = state.selB ? state.data[state.selB] : null;
+  if(!histData || !ta || !tb) return;
+  document.getElementById('histBody').hidden = false;
+  document.getElementById('histEmpty').hidden = true;
+  const s = histData.series, st = s[0];
+  const ma = state.meta[state.selA], mb = state.meta[state.selB];
+  const set = (id,t)=>{ document.getElementById(id).textContent = t; };
+  const nowA = ta.trade_price, nowB = tb.trade_price, nowR = nowA / nowB;
+
+  set('hcA', ma.base); set('hcB', mb.base); set('hcR', `1${ma.base}당 ${mb.base}`);
+  set('hsA', fmtPrice(st.a, state.quote));  set('hsB', fmtPrice(st.b, state.quote));  set('hsR', fmtQty(st.r));
+  set('hnA', fmtPrice(nowA, state.quote));  set('hnB', fmtPrice(nowB, state.quote));  set('hnR', fmtQty(nowR));
+
+  const pctTxt = v => `${v>=0?'+':'−'}${Math.abs(v).toFixed(2)}%`;
+  [['hdA', (nowA/st.a-1)*100], ['hdB', (nowB/st.b-1)*100], ['hdR', (nowR/st.r-1)*100]].forEach(([id,v])=>{
+    const el = document.getElementById(id);
+    el.textContent = pctTxt(v); el.className = dirClass(v);
+  });
+
+  const rs = s.map(x=>x.r).concat([nowR]);
+  const lo = Math.min(...rs), hi = Math.max(...rs);
+  const pos = hi > lo ? (nowR-lo)/(hi-lo)*100 : 50;
+  document.getElementById('hrSpark').innerHTML = sparkline(rs);
+  set('hrLo', fmtQty(lo)); set('hrHi', fmtQty(hi));
+  const hp = document.getElementById('hrPos');
+  hp.textContent = `현재 ${fmtQty(nowR)} · 기간 내 ${pos.toFixed(0)}% 지점`
+                 + (pos>=70 ? ' — A가 비싼 편' : pos<=30 ? ' — A가 싼 편' : '');
+  hp.className = 'hr-pos ' + (pos>=70 ? 'up' : pos<=30 ? 'down' : '');
 }
 
 /* ---------- 교환 시뮬레이션 ----------
@@ -1485,8 +1623,14 @@ function bindUI(){
     });
   });
   // A/B 비교 셀렉트 (드롭다운 전용 — 행 클릭과 분리)
-  document.getElementById('selA').addEventListener('change', e=>{ state.selA = e.target.value||null; updateCompare(); });
-  document.getElementById('selB').addEventListener('change', e=>{ state.selB = e.target.value||null; updateCompare(); });
+  document.getElementById('selA').addEventListener('change', e=>{ state.selA = e.target.value||null; updateCompare(); loadPairHistory(); });
+  document.getElementById('selB').addEventListener('change', e=>{ state.selB = e.target.value||null; updateCompare(); loadPairHistory(); });
+  document.getElementById('histTabs').addEventListener('click', e=>{
+    const b = e.target.closest('button[data-p]'); if(!b) return;
+    state.histPeriod = b.dataset.p;
+    document.querySelectorAll('#histTabs button').forEach(x=>x.classList.toggle('on', x===b));
+    loadPairHistory();
+  });
   // 교환 시뮬레이션 — 값만 갱신하므로 입력 중 포커스가 끊기지 않는다
   document.getElementById('swapQty').addEventListener('input', e=>{ state.swapQty = e.target.value; updateSwap(); });
   document.getElementById('swapFee').addEventListener('change', updateSwap);
