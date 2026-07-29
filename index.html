@@ -925,7 +925,7 @@ const WS_URL = 'wss://api.upbit.com/websocket/v1';
 // 계정·히스토리 API (Cloudflare Workers). 로컬에서 열면 dev 서버를 본다.
 const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8787'
-  : 'https://coin-ticker-api.PLACEHOLDER.workers.dev';
+  : 'https://coin-ticker-api.jun-test.workers.dev';
 
 const state = {
   meta: {},          // market -> {market, ko, en, quote, base}

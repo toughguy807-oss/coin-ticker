@@ -2,11 +2,10 @@ name = "coin-ticker-api"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
 
-# database_id 는 `wrangler d1 create coin-ticker` 실행 후 출력값으로 채운다.
 [[d1_databases]]
 binding = "DB"
 database_name = "coin-ticker"
-database_id = "PLACEHOLDER_RUN_D1_CREATE"
+database_id = "ff9eb18c-e5df-47ab-924a-68e41c82cbd9"
 
 [vars]
 # 프론트가 올라가 있는 출처만 CORS 허용 (쉼표로 여러 개)
