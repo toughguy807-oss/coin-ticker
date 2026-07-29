@@ -52,6 +52,9 @@
     --flash-down:rgba(74,138,244,.18);
   }
   *{box-sizing:border-box}
+  /* display를 지정한 요소(.modal 등)에서는 작성자 스타일이 UA의 [hidden]{display:none}을
+     이겨 hidden 속성이 무력화된다. 투명 오버레이가 화면을 덮어 클릭을 삼키므로 못 박아 둔다. */
+  [hidden]{display:none !important}
   html,body{margin:0}
   body{
     background:var(--bg); color:var(--text); font-family:var(--sans);
@@ -228,6 +231,29 @@
     cursor:pointer; display:grid; place-items:center; transition:transform .18s ease, border-color .18s ease, color .18s ease}
   .swap-dir:hover{border-color:var(--accent); color:var(--accent); transform:rotate(180deg)}
 
+  /* ---- 기록 버튼 / 트레이드 기록 ---- */
+  .swap-save{display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap}
+  .swap-save-btn{background:var(--accent); color:#fff; border:0; border-radius:6px; padding:8px 14px;
+    font-size:var(--fs-xs); font-weight:800; cursor:pointer; font-family:var(--sans)}
+  .swap-save-btn:disabled{opacity:.5; cursor:default}
+  .swap-save-hint{font-size:var(--fs-xs); color:var(--muted); overflow-wrap:anywhere}
+  .trades-body{padding:4px 0 6px}
+  .trades-empty{padding:18px; text-align:center}
+  .tr-tab{width:100%; border-collapse:collapse; font-size:var(--fs-xs)}
+  .tr-tab th{color:var(--muted); font-weight:700; text-align:left; padding:8px 14px;
+    border-bottom:1px solid var(--line-weak); white-space:nowrap}
+  .tr-tab td{padding:9px 14px; border-bottom:1px solid var(--line-weak);
+    font-family:var(--mono,var(--sans)); font-weight:600; vertical-align:middle}
+  .tr-tab tr:last-child td{border-bottom:0}
+  .tr-tab tbody tr:hover{background:var(--panel-2)}
+  .tr-pair{font-weight:800; overflow-wrap:anywhere}
+  .tr-arrow{color:var(--muted-2); padding:0 4px}
+  .tr-memo{color:var(--muted); font-family:var(--sans); font-weight:600}
+  .tr-del{background:var(--panel); border:1px solid var(--line); color:var(--muted); border-radius:5px;
+    padding:3px 8px; font-size:var(--fs-xs); font-weight:700; cursor:pointer; font-family:var(--sans)}
+  .tr-del:hover{border-color:var(--down); color:var(--down)}
+  .tr-wrap{overflow-x:auto}
+
   /* ---- 왕복(개수 불리기) ---- */
   .round{border-top:1px dashed var(--line); margin-top:16px; padding-top:14px}
   .round-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap}
@@ -382,6 +408,32 @@
   .toast .tx span{font-size:var(--fs-sm); color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
   /* 드로어 */
+  /* ---- 계정 / 로그인 ---- */
+  .acct-btn{background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); color:#fff;
+    border-radius:6px; padding:5px 10px; font-size:var(--fs-xs); font-weight:700; cursor:pointer;
+    font-family:var(--sans); white-space:nowrap; max-width:150px; overflow:hidden; text-overflow:ellipsis}
+  .acct-btn:hover{background:rgba(255,255,255,.24)}
+  .modal{position:fixed; inset:0; z-index:80; display:grid; place-items:center;
+    background:rgba(15,22,38,.45); padding:16px}
+  .modal-box{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    width:340px; max-width:100%; box-shadow:0 18px 50px rgba(15,22,38,.22)}
+  .modal-head{display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px; border-bottom:1px solid var(--line-weak)}
+  .modal-head b{font-size:var(--fs-md); font-weight:800}
+  .auth-form{padding:16px 16px 6px; display:flex; flex-direction:column}
+  .auth-lab{font-size:var(--fs-xs); color:var(--muted); font-weight:700; margin-bottom:5px}
+  .auth-inp{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:9px 10px;
+    font-size:var(--fs-base); color:var(--text); font-family:var(--sans); margin-bottom:12px; outline:none}
+  .auth-inp:focus{border-color:var(--accent)}
+  .auth-msg{font-size:var(--fs-xs); font-weight:700; color:var(--down); min-height:16px; margin-bottom:8px; overflow-wrap:anywhere}
+  .auth-msg.ok{color:var(--up)}
+  .auth-submit{background:var(--accent); color:#fff; border:0; border-radius:6px; padding:10px;
+    font-size:var(--fs-base); font-weight:800; cursor:pointer; font-family:var(--sans)}
+  .auth-submit:disabled{opacity:.6; cursor:default}
+  .auth-switch{padding:10px 16px 16px; font-size:var(--fs-xs); color:var(--muted); text-align:center}
+  .auth-switch button{background:none; border:0; color:var(--accent); font-weight:800; cursor:pointer;
+    font-size:var(--fs-xs); font-family:var(--sans); text-decoration:underline; padding:0 0 0 4px}
+
   .drawer-overlay{position:fixed; inset:0; background:rgba(15,22,38,.4); opacity:0; visibility:hidden;
     transition:opacity .25s, visibility .25s; z-index:70}
   .drawer-overlay.show{opacity:1; visibility:visible}
@@ -525,6 +577,7 @@
   </div>
   <div class="spacer"></div>
   <div class="status"><span class="dot" id="dot"></span><span id="statusText">연결 중…</span></div>
+  <button class="acct-btn" id="acctBtn" title="계정">로그인</button>
   <button class="bell-btn" id="bellBtn" title="알림 센터" aria-label="알림 센터">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
     <span class="bell-badge" id="bellBadge" style="display:none">0</span>
@@ -691,6 +744,22 @@
             </div>
           </div>
         </div>
+
+        <div class="swap-save" id="swapSaveRow" hidden>
+          <button type="button" class="swap-save-btn" id="swapSave">이 교환 기록하기</button>
+          <span class="swap-save-hint" id="swapSaveHint"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 트레이드 기록 — 계정별 보관 -->
+    <section class="card trades">
+      <div class="c-head">
+        <span class="c-tag">LOG</span><h2>트레이드 기록</h2>
+        <span class="c-hint" id="tradesHint">로그인하면 교환 기록을 계정에 저장합니다</span>
+      </div>
+      <div class="trades-body" id="tradesBody">
+        <div class="cmp-empty trades-empty">로그인 후 이용할 수 있습니다</div>
       </div>
     </section>
 
@@ -748,6 +817,28 @@
 </div>
 
 <!-- 토스트 컨테이너 (GNB 아래 우상단) -->
+<!-- 로그인 / 회원가입 -->
+<div class="modal" id="authModal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="modal-head">
+      <b id="authTitle">로그인</b>
+      <button class="drawer-close" id="authClose" aria-label="닫기">✕</button>
+    </div>
+    <form id="authForm" class="auth-form" autocomplete="on">
+      <label class="auth-lab" for="authUser">아이디</label>
+      <input class="auth-inp" type="text" id="authUser" autocomplete="username" maxlength="20" />
+      <label class="auth-lab" for="authPw">비밀번호</label>
+      <input class="auth-inp" type="password" id="authPw" autocomplete="current-password" />
+      <div class="auth-msg" id="authMsg"></div>
+      <button class="auth-submit" type="submit" id="authSubmit">로그인</button>
+    </form>
+    <div class="auth-switch">
+      <span id="authSwitchTxt">계정이 없으신가요?</span>
+      <button type="button" id="authSwitch">회원가입</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
 
 <!-- 알림 센터 드로어 -->
@@ -831,6 +922,10 @@
 
 const REST = 'https://api.upbit.com/v1';
 const WS_URL = 'wss://api.upbit.com/websocket/v1';
+// 계정·히스토리 API (Cloudflare Workers). 로컬에서 열면 dev 서버를 본다.
+const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ? 'http://127.0.0.1:8787'
+  : 'https://coin-ticker-api.PLACEHOLDER.workers.dev';
 
 const state = {
   meta: {},          // market -> {market, ko, en, quote, base}
@@ -1364,6 +1459,167 @@ function updateCompare(){
   updateSwap();
 }
 
+/* ---------- 계정 ----------
+   프론트가 API와 다른 출처(GitHub Pages ↔ workers.dev)에 있어 크로스 오리진 쿠키를
+   피하려고 Bearer 토큰을 쓴다. 토큰은 localStorage에 두고 세션은 서버가 만료시킨다. */
+const TOKEN_KEY = 'ct_token';
+let auth = { token: localStorage.getItem(TOKEN_KEY) || null, username: null };
+let authMode = 'login';
+const escHtml = s => String(s).replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+async function api(path, opts = {}){
+  const res = await fetch(API_BASE + path, {
+    method: opts.method || 'GET',
+    headers: { 'Content-Type': 'application/json',
+               ...(auth.token ? { Authorization: 'Bearer ' + auth.token } : {}) },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  let data = null; try{ data = await res.json(); }catch(_){}
+  if(!res.ok) throw new Error((data && data.error) || `요청 실패 (${res.status})`);
+  return data;
+}
+function setAuth(token, username){
+  auth = { token: token || null, username: username || null };
+  if(token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY);
+  renderAcct();
+  loadTrades();
+}
+// Worker 주소가 아직 안 박힌 상태로 배포돼도 화면이 깨지지 않게 계정 UI를 접어 둔다
+const API_READY = !API_BASE.includes('PLACEHOLDER');
+function renderAcct(){
+  const b = document.getElementById('acctBtn');
+  if(!b) return;
+  if(!API_READY){
+    b.hidden = true;
+    document.getElementById('tradesHint').textContent = '계정 서버 연결 준비 중입니다';
+    document.getElementById('tradesBody').innerHTML =
+      '<div class="cmp-empty trades-empty">계정 서버가 연결되면 교환 기록을 저장할 수 있습니다</div>';
+    updateSaveRow();
+    return;
+  }
+  b.hidden = false;
+  b.textContent = auth.username || '로그인';
+  b.title = auth.username ? '클릭하면 로그아웃' : '로그인 / 회원가입';
+  document.getElementById('tradesHint').textContent = auth.username
+    ? `${auth.username} 계정에 저장됩니다`
+    : '로그인하면 교환 기록을 계정에 저장합니다';
+  updateSaveRow();
+}
+function setAuthMode(mode){
+  authMode = mode;
+  const login = mode === 'login';
+  document.getElementById('authTitle').textContent   = login ? '로그인' : '회원가입';
+  document.getElementById('authSubmit').textContent  = login ? '로그인' : '가입하고 시작하기';
+  document.getElementById('authSwitchTxt').textContent = login ? '계정이 없으신가요?' : '이미 계정이 있으신가요?';
+  document.getElementById('authSwitch').textContent  = login ? '회원가입' : '로그인';
+  document.getElementById('authPw').autocomplete     = login ? 'current-password' : 'new-password';
+  document.getElementById('authPw').placeholder      = login ? '' : '8자 이상';
+  document.getElementById('authMsg').textContent     = '';
+}
+function openAuth(){
+  document.getElementById('authModal').hidden = false;
+  setAuthMode('login');
+  document.getElementById('authUser').focus();
+}
+function closeAuth(){ document.getElementById('authModal').hidden = true; }
+
+async function submitAuth(e){
+  e.preventDefault();
+  const username = document.getElementById('authUser').value.trim();
+  const password = document.getElementById('authPw').value;
+  const msg = document.getElementById('authMsg'), btn = document.getElementById('authSubmit');
+  msg.textContent = ''; btn.disabled = true;
+  try{
+    const r = await api(authMode === 'login' ? '/api/auth/login' : '/api/auth/register',
+                        { method:'POST', body:{ username, password } });
+    setAuth(r.token, r.username);
+    closeAuth();
+    toastSimple(`${r.username}님, 로그인되었습니다`);
+  }catch(err){
+    msg.textContent = err.message;
+  }finally{ btn.disabled = false; }
+}
+async function logout(){
+  try{ await api('/api/auth/logout', { method:'POST' }); }catch(_){ /* 만료된 세션이면 무시 */ }
+  setAuth(null, null);
+  toastSimple('로그아웃되었습니다');
+}
+async function restoreSession(){
+  if(!API_READY || !auth.token){ renderAcct(); return; }
+  try{
+    const me = await api('/api/auth/me');
+    auth.username = me.username;
+  }catch(_){                                  // 만료·위조 토큰이면 조용히 정리
+    auth = { token:null, username:null };
+    localStorage.removeItem(TOKEN_KEY);
+  }
+  renderAcct();
+  loadTrades();
+}
+
+/* ---------- 트레이드 기록 ---------- */
+function updateSaveRow(){
+  const row = document.getElementById('swapSaveRow');
+  if(!row) return;
+  row.hidden = !roundCtx || !API_READY;       // 교환 시뮬레이션이 성립할 때만 노출
+  if(row.hidden) return;
+  document.getElementById('swapSave').disabled = !auth.token;
+  document.getElementById('swapSaveHint').textContent = auth.token ? '' : '로그인하면 계정에 저장됩니다';
+}
+async function loadTrades(){
+  const body = document.getElementById('tradesBody');
+  if(!body || !API_READY) return;
+  if(!auth.token){ body.innerHTML = '<div class="cmp-empty trades-empty">로그인 후 이용할 수 있습니다</div>'; return; }
+  try{
+    renderTrades((await api('/api/trades')).trades || []);
+  }catch(e){
+    body.innerHTML = `<div class="cmp-empty trades-empty">${escHtml(e.message)}</div>`;
+  }
+}
+function renderTrades(list){
+  const body = document.getElementById('tradesBody');
+  if(!list.length){
+    body.innerHTML = '<div class="cmp-empty trades-empty">아직 기록이 없습니다 · 교환 시뮬레이션에서 “이 교환 기록하기”를 눌러 보세요</div>';
+    return;
+  }
+  const sym = mk => (state.meta[mk] || {}).base || String(mk).split('-')[1] || mk;
+  const rows = list.map(t => {
+    const d = new Date(t.traded_at), p2 = n => String(n).padStart(2,'0');
+    return `<tr>
+      <td>${p2(d.getMonth()+1)}.${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}</td>
+      <td class="tr-pair">${fmtQty(t.from_qty)} ${escHtml(sym(t.from_market))}`
+        + `<span class="tr-arrow">→</span>${fmtQty(t.to_qty)} ${escHtml(sym(t.to_market))}</td>
+      <td>${fmtQty(t.ratio)}</td>
+      <td class="tr-memo">${t.memo ? escHtml(t.memo) : ''}</td>
+      <td style="text-align:right"><button class="tr-del" data-id="${t.id}">삭제</button></td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `<div class="tr-wrap"><table class="tr-tab">
+    <thead><tr><th>일시</th><th>교환</th><th>교환비</th><th>메모</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+async function saveTrade(){
+  if(!auth.token || !roundCtx) return;
+  const { mFrom, mTo, use, out, r1 } = roundCtx;
+  const btn = document.getElementById('swapSave');
+  btn.disabled = true;
+  try{
+    await api('/api/trades', { method:'POST', body:{
+      from_market: mFrom.market, to_market: mTo.market,
+      from_qty: use, to_qty: out, ratio: r1,
+      from_price: (state.data[mFrom.market]||{}).trade_price || 0,
+      to_price:   (state.data[mTo.market]  ||{}).trade_price || 0,
+      quote: state.quote,
+      fee_applied: document.getElementById('swapFee').checked,
+    }});
+    toastSimple('교환 기록을 저장했습니다');
+    loadTrades();
+  }catch(e){
+    toastSimple(e.message);
+  }finally{ updateSaveRow(); }
+}
+
 /* ---------- 기간별 추이 ----------
    두 코인의 절대 가격보다 '교환비(1 A = ? B)'가 기간 내 어디쯤인지가 중요하다.
    비율이 높을수록 A가 B 대비 비싸므로 A→B로 갈아탈 자리이고, 낮을수록 그 반대다. */
@@ -1531,7 +1787,7 @@ function updateRound(ctx){
   const panel = document.getElementById('roundPanel');
   if(!panel) return;
   roundCtx = ctx;
-  if(!ctx){ panel.hidden = true; return; }
+  if(!ctx){ panel.hidden = true; updateSaveRow(); return; }
   panel.hidden = false;
   const { mFrom, mTo, hold, use, left, out, r1, k } = ctx;
   const set = (id, t) => { document.getElementById(id).textContent = t; };
@@ -1556,6 +1812,7 @@ function updateRound(ctx){
   d.className = 'round-delta num ' + dirClass(gain);
   set('roundNote', `손익분기 1 ${mFrom.base} = ${fmtQty(be)} ${mTo.base} 이하 · `
                  + `왕복 수수료 ${((1 - k*k) * 100).toFixed(2)}%`);
+  updateSaveRow();
 }
 
 /* ---------- 마켓 전환 (계약 유지 + 상세 갱신) ---------- */
@@ -1645,6 +1902,26 @@ function bindUI(){
     const b = e.target.closest('button[data-pct]'); if(!b) return;
     state.swapPct = +b.dataset.pct;
     updateSwap();
+  });
+  // 계정
+  document.getElementById('acctBtn').addEventListener('click', ()=>{
+    if(auth.username){ if(confirm(`${auth.username} 계정에서 로그아웃할까요?`)) logout(); }
+    else openAuth();
+  });
+  document.getElementById('authClose').addEventListener('click', closeAuth);
+  document.getElementById('authModal').addEventListener('click', e=>{ if(e.target.id === 'authModal') closeAuth(); });
+  document.getElementById('authForm').addEventListener('submit', submitAuth);
+  document.getElementById('authSwitch').addEventListener('click', ()=> setAuthMode(authMode === 'login' ? 'register' : 'login'));
+  document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape' && !document.getElementById('authModal').hidden) closeAuth();
+  });
+  // 트레이드 기록
+  document.getElementById('swapSave').addEventListener('click', saveTrade);
+  document.getElementById('tradesBody').addEventListener('click', async e=>{
+    const b = e.target.closest('.tr-del'); if(!b) return;
+    if(!confirm('이 기록을 삭제할까요?')) return;
+    try{ await api('/api/trades/' + b.dataset.id, { method:'DELETE' }); loadTrades(); }
+    catch(err){ toastSimple(err.message); }
   });
   document.getElementById('roundRatio').addEventListener('input', e=>{ state.roundRatio = e.target.value; updateSwap(); });
   document.getElementById('roundPcts').addEventListener('click', e=>{
@@ -1986,6 +2263,7 @@ function renderSettings(){
   renderAlertList();
   renderSettings();
   updateBell();
+  restoreSession();   // 저장된 토큰이 살아 있으면 로그인 상태로 복원
 })();
 </script>
 </body>

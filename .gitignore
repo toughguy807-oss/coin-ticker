@@ -1,3 +1,7 @@
 # 이전 버전 백업 (배포 제외)
 index_v1_simple_backup.html
 index_v2.html
+
+# wrangler 로컬 상태 (로컬 D1 데이터·캐시)
+worker/.wrangler/
+node_modules/
