@@ -1567,20 +1567,26 @@ function renderSettings(){
   }
   fillCompareSelects();
   buildRows();
+  // 실시간 스트림을 가장 먼저 확보한다.
+  // 업비트의 Origin 할당량은 초당 단위가 매우 작아, REST를 먼저 몰아 쏘면
+  // 정작 시세의 본류인 WS 핸드셰이크가 429로 밀려 "재연결 중…"에 갇힌다.
+  // WS만 붙으면 이후 REST가 실패해도 시세는 계속 흐른다.
+  connect();
+  await sleep(700);
   await loadSnapshot(state.quote);
   for(const mk of state.byQuote[state.quote]) updateRow(mk, false);
   state.detail = defaultDetail(state.quote);   // 스냅샷 이후 = 거래대금 최대
   refreshDetailHighlight();
   reorder();
   updateDetail();
-  loadChart();
+  // 차트는 화면 필수 요소가 아니므로 마지막에, 간격을 두고 요청
+  sleep(700).then(loadChart);
   // 알림 시스템 초기 렌더
   renderFeed();
   fillAlertMarketSelect();
   renderAlertList();
   renderSettings();
   updateBell();
-  connect();        // ticker WS
 })();
 </script>
 </body>
