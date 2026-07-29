@@ -743,10 +743,26 @@ function fmtCandleTime(s, period){
   return period==='1D' ? `${md} ${hm}` : md;
 }
 
+/* ---------- 업비트 호출 (rate limit 대응) ----------
+   업비트는 브라우저 직접 호출을 Origin 단위로 강하게 제한한다
+   (Remaining-Req: group=origin · 분당 약 10회 · 서버 호출의 1/100 수준).
+   429를 고정 간격으로 재시도하면 남은 할당량을 계속 깎아 영구 실패로 굳으므로
+   지수 백오프로 물러선다. jitter는 여러 사용자의 재시도가 겹치는 것을 막는다. */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function fetchUpbit(url, retries = 4){
+  let wait = 1000;
+  for(let i = 0; ; i++){
+    const res = await fetch(url);
+    if(res.ok) return res.json();
+    if(res.status !== 429 || i >= retries) throw new Error('http '+res.status);
+    await sleep(wait + Math.random()*400);
+    wait = Math.min(wait*2, 15000);
+  }
+}
+
 /* ---------- 초기 로드 (계약 유지) ---------- */
 async function loadMarkets(){
-  const res = await fetch(`${REST}/market/all?isDetails=false`);
-  const list = await res.json();
+  const list = await fetchUpbit(`${REST}/market/all?isDetails=false`);
   for(const m of list){
     const [quote, base] = m.market.split('-');
     if(!state.byQuote[quote]) continue;
@@ -758,23 +774,28 @@ async function loadSnapshot(quote){
   const codes = state.byQuote[quote];
   if(!codes.length) return;
   try{
-    const res = await fetch(`${REST}/ticker?markets=${codes.join(',')}`);
-    const arr = await res.json();
+    const arr = await fetchUpbit(`${REST}/ticker?markets=${codes.join(',')}`, 2);
     for(const t of arr){ t.code = t.market; state.data[t.code] = t; }
   }catch(e){ /* WS가 곧 채움 */ }
 }
 
 /* ---------- WebSocket (계약 유지) ---------- */
+let wsRetry = 0;
 function connect(){
   wsQuote = state.quote;
   ws = new WebSocket(WS_URL);
   ws.binaryType = 'arraybuffer';
-  ws.onopen = () => { setStatus(true); subscribe(); };
+  ws.onopen = () => { wsRetry = 0; setStatus(true); subscribe(); };
   ws.onmessage = (e) => {
     let t; try{ t = JSON.parse(new TextDecoder('utf-8').decode(e.data)); }catch(_){ return; }
     if(t.type === 'ticker') ingest(t);
   };
-  ws.onclose = () => { setStatus(false); setTimeout(connect, 1500); };
+  // 핸드셰이크도 Origin 할당량을 쓴다 — 1.5초 고정 재시도는 429를 영구화하므로 백오프
+  ws.onclose = () => {
+    setStatus(false);
+    const delay = Math.min(1500 * Math.pow(2, wsRetry++), 30000);
+    setTimeout(connect, delay + Math.random()*500);
+  };
   ws.onerror = () => { try{ ws.close(); }catch(_){} };
 }
 function subscribe(){
@@ -1037,9 +1058,7 @@ async function loadChart(){
             : p==='1W' ? `${REST}/candles/days?market=${mk}&count=7`
             :            `${REST}/candles/days?market=${mk}&count=30`;
   try{
-    const res = await fetch(url);
-    if(!res.ok) throw new Error('http '+res.status);
-    const arr = await res.json();
+    const arr = await fetchUpbit(url, 2);
     if(reqId !== chartReqId) return;                 // stale 응답 폐기
     if(!Array.isArray(arr) || arr.length < 2) throw new Error('empty');
     arr.reverse();                                   // 최신순 → 과거→현재
@@ -1543,7 +1562,7 @@ function renderSettings(){
     await loadMarkets();
   }catch(e){
     document.getElementById('emptyMsg').style.display='block';
-    document.getElementById('emptyMsg').textContent='마켓 목록을 불러오지 못했습니다. 네트워크를 확인하세요.';
+    document.getElementById('emptyMsg').textContent='업비트 서버가 잠시 요청을 제한하고 있습니다. 30초쯤 뒤 새로고침해 주세요. (새로고침을 연달아 누르면 더 오래 걸립니다)';
     return;
   }
   fillCompareSelects();
