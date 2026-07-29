@@ -200,6 +200,7 @@
   .swap-presets button{border:1px solid var(--line); background:var(--panel); color:var(--muted);
     border-radius:5px; padding:4px 8px; font-size:var(--fs-xs); font-weight:700; cursor:pointer; font-family:var(--sans)}
   .swap-presets button:hover{border-color:var(--accent); color:var(--accent)}
+  .swap-presets button.on{background:var(--accent); border-color:var(--accent); color:#fff}
   .swap-dir{align-self:center; margin-top:22px; width:34px; height:34px; flex:none; border-radius:8px;
     border:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:var(--fs-base);
     cursor:pointer; display:grid; place-items:center; transition:transform .18s ease, border-color .18s ease, color .18s ease}
@@ -578,7 +579,13 @@
               <span class="swap-unit" id="swapFromUnit">—</span>
             </div>
             <div class="swap-sub num" id="swapFromAmt">—</div>
-            <div class="swap-presets" id="swapPresets"></div>
+            <div class="swap-presets" id="swapPcts">
+              <button type="button" data-pct="25">25%</button>
+              <button type="button" data-pct="50">50%</button>
+              <button type="button" data-pct="75">75%</button>
+              <button type="button" data-pct="100" class="on">100%</button>
+            </div>
+            <div class="swap-sub num" id="swapUseAmt"></div>
           </div>
           <button class="swap-dir" id="swapDir" title="방향 바꾸기" aria-label="교환 방향 바꾸기">⇄</button>
           <div class="swap-side">
@@ -740,7 +747,7 @@ const state = {
   sortKey: 'rate',   // name|price|rate|change|volume
   sortDir: -1,       // 1 asc, -1 desc
   selA: null, selB: null,
-  swapQty: '', swapDir: 'ab',   // 교환 시뮬레이션 입력값 / 방향(ab = A를 팔아 B를 삼)
+  swapQty: '', swapDir: 'ab', swapPct: 100,   // 교환 시뮬레이션: 보유 수량 / 방향(ab = A를 팔아 B를 삼) / 교환 비율
   detail: null,      // 상세 패널에 표시할 마켓 (UI 전용 — 행 클릭)
   chartPeriod: '1D', // 1D | 1W | 1M
   // --- 알림/이상거래 감지 ---
@@ -1215,9 +1222,8 @@ function fillCompareSelects(){
   selB.innerHTML = '<option value="">— 선택 —</option>'+opts;
   state.selA = null; state.selB = null;
   selA.value=''; selB.value='';
-  state.swapQty = ''; state.swapDir = 'ab';
+  state.swapQty = ''; state.swapDir = 'ab'; state.swapPct = 100;
   const sq = document.getElementById('swapQty'); if(sq) sq.value = '';
-  renderSwapPresets();   // 금액 프리셋은 호가통화(KRW/BTC/USDT)에 따라 달라짐
 }
 // A/B 비교는 상단 드롭다운으로만 선택 (행 클릭은 상세 전용 — 역할 분리)
 function sideView(sel, mk){
@@ -1268,13 +1274,10 @@ function fmtQty(v){
   if(v >= 1)    return v.toLocaleString('en-US',{maximumFractionDigits:4});
   return v.toLocaleString('en-US',{maximumFractionDigits:8});
 }
-function renderSwapPresets(){
-  const el = document.getElementById('swapPresets');
-  if(!el) return;
-  // 금액 프리셋은 원화마켓에서만 의미가 있다 (BTC/USDT 마켓은 단위가 다름)
-  el.innerHTML = state.quote === 'KRW'
-    ? [10,50,100,500].map(m=>`<button type="button" data-krw="${m*10000}">${m}만원</button>`).join('')
-    : '';
+function syncPctButtons(){
+  document.querySelectorAll('#swapPcts button').forEach(b=>{
+    b.classList.toggle('on', +b.dataset.pct === state.swapPct);
+  });
 }
 function updateSwap(){
   const body = document.getElementById('swapBody'), empty = document.getElementById('swapEmpty');
@@ -1294,29 +1297,36 @@ function updateSwap(){
   const fromPill = document.getElementById('swapFromPill'), toPill = document.getElementById('swapToPill');
   fromPill.textContent = ab ? 'A' : 'B'; fromPill.className = 'pill ' + (ab ? 'pillA' : 'pillB');
   toPill.textContent   = ab ? 'B' : 'A'; toPill.className   = 'pill ' + (ab ? 'pillB' : 'pillA');
-  set('swapFromName', `${mFrom.ko} 팔기`);
-  set('swapToName',   `${mTo.ko} 사기`);
+  set('swapFromName', `${mFrom.ko} 보유`);
+  set('swapToName',   `${mTo.ko} 받음`);
   set('swapFromUnit', mFrom.base);
+  syncPctButtons();
 
   const u = unit(state.quote);
-  const qty = parseFloat(state.swapQty);
-  if(!isFinite(qty) || qty <= 0){
+  const hold = parseFloat(state.swapQty);
+  if(!isFinite(hold) || hold <= 0){
     set('swapFromAmt', `1 ${mFrom.base} = ${fmtPrice(pFrom, state.quote)} ${u}`);
+    set('swapUseAmt', '');
     set('swapOut', '—');
     set('swapToAmt', `1 ${mTo.base} = ${fmtPrice(pTo, state.quote)} ${u}`);
     set('swapNote', '');
     return;
   }
   const fee   = document.getElementById('swapFee').checked;
-  const gross = qty * pFrom;                                     // 매도 대금
+  const use   = hold * (state.swapPct / 100);                    // 실제로 교환할 수량
+  const left  = hold - use;                                      // 교환 후 남는 보유분
+  const gross = use * pFrom;                                     // 매도 대금
   const net   = fee ? gross * (1 - SWAP_FEE) : gross;            // 매도 수수료 차감
   const out   = fee ? (net / pTo) * (1 - SWAP_FEE) : net / pTo;  // 매수 수수료 차감
 
-  set('swapFromAmt', `≈ ${fmtPrice(gross, state.quote)} ${u}`);
+  set('swapFromAmt', `보유 평가액 ≈ ${fmtPrice(hold * pFrom, state.quote)} ${u}`);
+  set('swapUseAmt', state.swapPct === 100
+    ? `전량 교환 · ${fmtQty(use)} ${mFrom.base}`
+    : `교환 ${fmtQty(use)} ${mFrom.base} · 남김 ${fmtQty(left)} ${mFrom.base}`);
   set('swapOut', `${fmtQty(out)} ${mTo.base}`);
   set('swapToAmt', `≈ ${fmtPrice(out * pTo, state.quote)} ${u}`);
   set('swapNote', (fee ? `수수료 ${fmtPrice(gross - out*pTo, state.quote)} ${u} 차감 · ` : `수수료 미반영 · `)
-    + `1 ${mFrom.base} = ${fmtQty(out/qty)} ${mTo.base}`);
+    + `1 ${mFrom.base} = ${fmtQty(out/use)} ${mTo.base}`);
 }
 
 /* ---------- 마켓 전환 (계약 유지 + 상세 갱신) ---------- */
@@ -1394,12 +1404,9 @@ function bindUI(){
     state.swapQty = ''; document.getElementById('swapQty').value = '';   // 단위가 바뀌므로 수량은 리셋
     updateSwap();
   });
-  document.getElementById('swapPresets').addEventListener('click', e=>{
-    const b = e.target.closest('button[data-krw]'); if(!b) return;
-    const t = state.data[state.swapDir === 'ab' ? state.selA : state.selB];
-    if(!t || !t.trade_price) return;
-    state.swapQty = String(+((+b.dataset.krw) / t.trade_price).toFixed(8));
-    document.getElementById('swapQty').value = state.swapQty;
+  document.getElementById('swapPcts').addEventListener('click', e=>{
+    const b = e.target.closest('button[data-pct]'); if(!b) return;
+    state.swapPct = +b.dataset.pct;
     updateSwap();
   });
   // 차트 기간 세그먼트 (1일/1주/1개월)
