@@ -206,6 +206,18 @@
     cursor:pointer; display:grid; place-items:center; transition:transform .18s ease, border-color .18s ease, color .18s ease}
   .swap-dir:hover{border-color:var(--accent); color:var(--accent); transform:rotate(180deg)}
 
+  /* ---- 왕복(개수 불리기) ---- */
+  .round{border-top:1px dashed var(--line); margin-top:16px; padding-top:14px}
+  .round-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap}
+  .round-title{font-size:var(--fs-sm); font-weight:800}
+  .round-hint{font-size:var(--fs-xs); color:var(--muted); font-family:var(--mono,var(--sans))}
+  .round-body{display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start}
+  .round-lab{font-size:var(--fs-xs); color:var(--muted); font-weight:700; margin-bottom:8px; overflow-wrap:anywhere}
+  .round-lab b{color:var(--text)}
+  .round-res{font-size:var(--fs-lg); font-weight:800; padding:8px 10px; border-radius:6px;
+    background:var(--panel-2); border:1px solid var(--line-weak); overflow-wrap:anywhere}
+  .round-delta{font-size:var(--fs-sm); font-weight:800; margin-top:6px; overflow-wrap:anywhere}
+
   /* ============ 푸터 ============ */
   .foot{color:var(--muted-2); font-size:var(--fs-xs); text-align:center; line-height:1.8; padding:4px 0 0}
   .foot .legend{display:inline-flex; gap:14px}
@@ -300,6 +312,7 @@
     .swap-body{grid-template-columns:1fr; gap:10px}
     .swap-dir{margin:0 auto; transform:rotate(90deg)}
     .swap-dir:hover{transform:rotate(270deg)}
+    .round-body{grid-template-columns:1fr; gap:12px}
     .d-stats{width:100%; padding-left:0; border-left:0; margin-top:12px}
   }
   @media (max-width:560px){
@@ -595,6 +608,35 @@
             <div class="swap-note num" id="swapNote"></div>
           </div>
         </div>
+
+        <!-- 왕복 — 이 도구의 목적은 원화 수익이 아니라 '코인 개수'를 늘리는 것 -->
+        <div class="round" id="roundPanel" hidden>
+          <div class="round-head">
+            <span class="round-title">되돌아오기 · 개수 불리기</span>
+            <span class="round-hint" id="roundNow">—</span>
+          </div>
+          <div class="round-body">
+            <div class="round-in">
+              <div class="round-lab">돌아올 때 교환비 <b id="roundPairLab">—</b></div>
+              <div class="swap-inp">
+                <input type="number" id="roundRatio" min="0" step="any" placeholder="—" inputmode="decimal" />
+                <span class="swap-unit" id="roundRatioUnit">—</span>
+              </div>
+              <div class="swap-presets" id="roundPcts">
+                <button type="button" data-d="-1">−1%</button>
+                <button type="button" data-d="-3">−3%</button>
+                <button type="button" data-d="-5">−5%</button>
+                <button type="button" data-d="-10">−10%</button>
+                <button type="button" data-d="be">손익분기</button>
+              </div>
+            </div>
+            <div class="round-out">
+              <div class="round-res num" id="roundRes">—</div>
+              <div class="round-delta num" id="roundDelta">—</div>
+              <div class="swap-note num" id="roundNote"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -748,6 +790,7 @@ const state = {
   sortDir: -1,       // 1 asc, -1 desc
   selA: null, selB: null,
   swapQty: '', swapDir: 'ab', swapPct: 100,   // 교환 시뮬레이션: 보유 수량 / 방향(ab = A를 팔아 B를 삼) / 교환 비율
+  roundRatio: '',                             // 왕복: 되돌아올 때의 교환비
   detail: null,      // 상세 패널에 표시할 마켓 (UI 전용 — 행 클릭)
   chartPeriod: '1D', // 1D | 1W | 1M
   // --- 알림/이상거래 감지 ---
@@ -1222,8 +1265,9 @@ function fillCompareSelects(){
   selB.innerHTML = '<option value="">— 선택 —</option>'+opts;
   state.selA = null; state.selB = null;
   selA.value=''; selB.value='';
-  state.swapQty = ''; state.swapDir = 'ab'; state.swapPct = 100;
+  state.swapQty = ''; state.swapDir = 'ab'; state.swapPct = 100; state.roundRatio = '';
   const sq = document.getElementById('swapQty'); if(sq) sq.value = '';
+  const rr = document.getElementById('roundRatio'); if(rr) rr.value = '';
 }
 // A/B 비교는 상단 드롭다운으로만 선택 (행 클릭은 상세 전용 — 역할 분리)
 function sideView(sel, mk){
@@ -1310,6 +1354,7 @@ function updateSwap(){
     set('swapOut', '—');
     set('swapToAmt', `1 ${mTo.base} = ${fmtPrice(pTo, state.quote)} ${u}`);
     set('swapNote', '');
+    updateRound(null);
     return;
   }
   const fee   = document.getElementById('swapFee').checked;
@@ -1327,6 +1372,52 @@ function updateSwap(){
   set('swapToAmt', `≈ ${fmtPrice(out * pTo, state.quote)} ${u}`);
   set('swapNote', (fee ? `수수료 ${fmtPrice(gross - out*pTo, state.quote)} ${u} 차감 · ` : `수수료 미반영 · `)
     + `1 ${mFrom.base} = ${fmtQty(out/use)} ${mTo.base}`);
+  updateRound({ mFrom, mTo, hold, use, left, out,
+    r1: pFrom / pTo,                                   // 지금 1 from 으로 받는 to 개수
+    k:  fee ? (1 - SWAP_FEE) * (1 - SWAP_FEE) : 1 });  // 편도 수수료 계수(매도+매수)
+}
+
+/* ---------- 왕복 — 코인 개수 불리기 ----------
+   원화 수익이 아니라 '개수'가 목적이다. A→B로 갈아탄 뒤 두 코인의 교환비가
+   벌어졌을 때 다시 A로 돌아오면 처음보다 A가 늘어난다.
+   최종 A = 사용분 × (r1/r2) × k²  (편도마다 매도·매수 2회, 왕복 4회 수수료)
+   따라서 r2 < r1 × k² 여야 이득 — 이 지점이 손익분기다. */
+let roundCtx = null;
+function plainNum(v){
+  if(!isFinite(v) || v <= 0) return '';
+  if(v >= 1000) return String(+v.toFixed(2));
+  if(v >= 1)    return String(+v.toFixed(6));
+  return String(+v.toFixed(8));
+}
+function updateRound(ctx){
+  const panel = document.getElementById('roundPanel');
+  if(!panel) return;
+  roundCtx = ctx;
+  if(!ctx){ panel.hidden = true; return; }
+  panel.hidden = false;
+  const { mFrom, mTo, hold, use, left, out, r1, k } = ctx;
+  const set = (id, t) => { document.getElementById(id).textContent = t; };
+
+  set('roundNow', `현재 1 ${mFrom.base} = ${fmtQty(r1)} ${mTo.base}`);
+  set('roundPairLab', `(1 ${mFrom.base} 당 ${mTo.base})`);
+  set('roundRatioUnit', mTo.base);
+  const inp = document.getElementById('roundRatio');
+  inp.placeholder = plainNum(r1);
+
+  const typed = parseFloat(state.roundRatio);
+  const r2 = (isFinite(typed) && typed > 0) ? typed : r1;   // 미입력이면 '지금 바로 되돌아온 경우'
+  const back  = (out / r2) * k;
+  const final = left + back;
+  const gain  = final - hold;
+  const be    = r1 * k * k;
+
+  set('roundRes', `${fmtQty(final)} ${mFrom.base}`);
+  const d = document.getElementById('roundDelta');
+  d.textContent = `${gain>=0?'+':'−'}${fmtQty(Math.abs(gain))} ${mFrom.base} `
+                + `(${gain>=0?'+':'−'}${Math.abs(hold>0 ? gain/hold*100 : 0).toFixed(2)}%)`;
+  d.className = 'round-delta num ' + dirClass(gain);
+  set('roundNote', `손익분기 1 ${mFrom.base} = ${fmtQty(be)} ${mTo.base} 이하 · `
+                 + `왕복 수수료 ${((1 - k*k) * 100).toFixed(2)}%`);
 }
 
 /* ---------- 마켓 전환 (계약 유지 + 상세 갱신) ---------- */
@@ -1401,12 +1492,24 @@ function bindUI(){
   document.getElementById('swapFee').addEventListener('change', updateSwap);
   document.getElementById('swapDir').addEventListener('click', ()=>{
     state.swapDir = state.swapDir === 'ab' ? 'ba' : 'ab';
-    state.swapQty = ''; document.getElementById('swapQty').value = '';   // 단위가 바뀌므로 수량은 리셋
+    // 수량·교환비 모두 단위가 뒤집히므로 리셋
+    state.swapQty = ''; document.getElementById('swapQty').value = '';
+    state.roundRatio = ''; document.getElementById('roundRatio').value = '';
     updateSwap();
   });
   document.getElementById('swapPcts').addEventListener('click', e=>{
     const b = e.target.closest('button[data-pct]'); if(!b) return;
     state.swapPct = +b.dataset.pct;
+    updateSwap();
+  });
+  document.getElementById('roundRatio').addEventListener('input', e=>{ state.roundRatio = e.target.value; updateSwap(); });
+  document.getElementById('roundPcts').addEventListener('click', e=>{
+    const b = e.target.closest('button[data-d]'); if(!b || !roundCtx) return;
+    const { r1, k } = roundCtx;
+    // '손익분기'는 딱 본전이 되는 교환비, 나머지는 현재 대비 변동률
+    const r2 = b.dataset.d === 'be' ? r1 * k * k : r1 * (1 + (+b.dataset.d) / 100);
+    state.roundRatio = plainNum(r2);
+    document.getElementById('roundRatio').value = state.roundRatio;
     updateSwap();
   });
   // 차트 기간 세그먼트 (1일/1주/1개월)
