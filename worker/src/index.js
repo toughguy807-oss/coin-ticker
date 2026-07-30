@@ -60,7 +60,7 @@ async function authenticate(request, env) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) return null;
   const row = await env.DB.prepare(
-    `SELECT s.user_id, s.expires_at, u.username
+    `SELECT s.user_id, s.expires_at, u.username, u.is_admin, u.must_change_pw
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token = ?`).bind(token).first();
   if (!row) return null;
@@ -68,7 +68,8 @@ async function authenticate(request, env) {
     await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
     return null;
   }
-  return { userId: row.user_id, username: row.username, token };
+  return { userId: row.user_id, username: row.username, token,
+           isAdmin: !!row.is_admin, mustChangePw: !!row.must_change_pw };
 }
 
 /* ---------- 업비트 프록시 ---------- */
@@ -128,26 +129,89 @@ async function handleRegister(request, env, origin) {
   const dup = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
   if (dup) return json({ error: '이미 사용 중인 아이디입니다.' }, 409, env, origin);
 
+  // 최초 가입자를 관리자로 삼는다 — 비밀번호 재설정을 해 줄 사람이 하나는 있어야 한다
+  const first = await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first();
+  const isAdmin = first.n === 0 ? 1 : 0;
+
   const { hash, salt } = await hashPassword(password);
   const res = await env.DB.prepare(
-    'INSERT INTO users (username, pw_hash, pw_salt, created_at) VALUES (?,?,?,?)')
-    .bind(username, hash, salt, Date.now()).run();
+    'INSERT INTO users (username, pw_hash, pw_salt, created_at, is_admin) VALUES (?,?,?,?,?)')
+    .bind(username, hash, salt, Date.now(), isAdmin).run();
   const userId = res.meta.last_row_id;
-  return json({ token: await issueSession(env, userId), username }, 200, env, origin);
+  return json({ token: await issueSession(env, userId), username, isAdmin: !!isAdmin }, 200, env, origin);
+}
+
+/* ---------- 비밀번호 변경 / 관리자 재설정 ---------- */
+async function changePassword(request, env, origin, me) {
+  const { current, next } = await request.json().catch(() => ({}));
+  if (typeof next !== 'string' || next.length < 8) return json({ error: '새 비밀번호는 8자 이상이어야 합니다.' }, 400, env, origin);
+  if (next.length > 200) return json({ error: '비밀번호가 너무 깁니다.' }, 400, env, origin);
+
+  const u = await env.DB.prepare('SELECT pw_hash, pw_salt FROM users WHERE id = ?').bind(me.userId).first();
+  if (!u || !await verifyPassword(String(current || ''), u.pw_salt, u.pw_hash))
+    return json({ error: '현재 비밀번호가 올바르지 않습니다.' }, 401, env, origin);
+
+  const { hash, salt } = await hashPassword(next);
+  await env.DB.prepare('UPDATE users SET pw_hash = ?, pw_salt = ?, must_change_pw = 0 WHERE id = ?')
+    .bind(hash, salt, me.userId).run();
+  // 비밀번호를 바꿨으면 다른 기기의 세션은 끊는다 (지금 쓰는 세션만 남김)
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').bind(me.userId, me.token).run();
+  return json({ ok: true }, 200, env, origin);
+}
+
+// 사람이 받아 적기 쉬운 임시 비밀번호 (혼동되는 O0Il1 제외)
+function tempPassword() {
+  const CS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const buf = crypto.getRandomValues(new Uint8Array(12));
+  return [...buf].map(b => CS[b % CS.length]).join('');
+}
+async function listUsers(env, origin) {
+  const { results } = await env.DB.prepare(
+    `SELECT u.id, u.username, u.created_at, u.is_admin, u.must_change_pw,
+            (SELECT COUNT(*) FROM trades t WHERE t.user_id = u.id) AS trade_count
+       FROM users u ORDER BY u.id`).all();
+  return json({ users: results || [] }, 200, env, origin);
+}
+async function resetPassword(request, env, origin, me) {
+  const { user_id } = await request.json().catch(() => ({}));
+  const target = await env.DB.prepare('SELECT id, username, is_admin FROM users WHERE id = ?').bind(user_id).first();
+  if (!target) return json({ error: '없는 계정입니다.' }, 404, env, origin);
+  if (target.id === me.userId) return json({ error: '본인 비밀번호는 비밀번호 변경에서 바꿔 주세요.' }, 400, env, origin);
+
+  const pw = tempPassword();
+  const { hash, salt } = await hashPassword(pw);
+  await env.DB.prepare('UPDATE users SET pw_hash = ?, pw_salt = ?, must_change_pw = 1 WHERE id = ?')
+    .bind(hash, salt, target.id).run();
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(target.id).run();  // 기존 세션 전부 무효화
+  // 임시 비밀번호는 저장하지 않고 이 응답에서 한 번만 보여 준다
+  return json({ username: target.username, password: pw }, 200, env, origin);
+}
+async function deleteUser(env, origin, me, id) {
+  if (id === me.userId) return json({ error: '본인 계정은 삭제할 수 없습니다.' }, 400, env, origin);
+  const t = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(id).first();
+  if (!t) return json({ error: '없는 계정입니다.' }, 404, env, origin);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM trades   WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM users    WHERE id = ?').bind(id),
+  ]);
+  return json({ ok: true }, 200, env, origin);
 }
 
 async function handleLogin(request, env, origin) {
   const { username, password } = await request.json().catch(() => ({}));
   if (!username || !password) return json({ error: '아이디와 비밀번호를 입력해 주세요.' }, 400, env, origin);
 
-  const user = await env.DB.prepare('SELECT id, username, pw_hash, pw_salt FROM users WHERE username = ?')
+  const user = await env.DB.prepare(
+    'SELECT id, username, pw_hash, pw_salt, is_admin, must_change_pw FROM users WHERE username = ?')
     .bind(username).first();
   // 아이디 존재 여부를 응답으로 구분할 수 없게 메시지를 하나로 통일한다
   const fail = () => json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, 401, env, origin);
   if (!user) { await derive(password, new Uint8Array(16)); return fail(); }   // 타이밍 평탄화
   if (!await verifyPassword(password, user.pw_salt, user.pw_hash)) return fail();
 
-  return json({ token: await issueSession(env, user.id), username: user.username }, 200, env, origin);
+  return json({ token: await issueSession(env, user.id), username: user.username,
+                isAdmin: !!user.is_admin, mustChangePw: !!user.must_change_pw }, 200, env, origin);
 }
 
 /* ---------- 트레이드 히스토리 ---------- */
@@ -214,8 +278,20 @@ export default {
         return json({ ok: true }, 200, env, origin);
       }
       if (p === '/api/auth/me') {
-        return me ? json({ username: me.username }, 200, env, origin)
+        return me ? json({ username: me.username, isAdmin: me.isAdmin, mustChangePw: me.mustChangePw }, 200, env, origin)
                   : json({ error: '로그인이 필요합니다.' }, 401, env, origin);
+      }
+      if (p === '/api/auth/change-password' && request.method === 'POST') {
+        if (!me) return json({ error: '로그인이 필요합니다.' }, 401, env, origin);
+        return await changePassword(request, env, origin, me);
+      }
+      if (p.startsWith('/api/admin/')) {
+        if (!me) return json({ error: '로그인이 필요합니다.' }, 401, env, origin);
+        if (!me.isAdmin) return json({ error: '관리자만 사용할 수 있습니다.' }, 403, env, origin);
+        if (p === '/api/admin/users' && request.method === 'GET') return await listUsers(env, origin);
+        if (p === '/api/admin/reset-password' && request.method === 'POST') return await resetPassword(request, env, origin, me);
+        const du = p.match(/^\/api\/admin\/users\/(\d+)$/);
+        if (du && request.method === 'DELETE') return await deleteUser(env, origin, me, +du[1]);
       }
       if (p.startsWith('/api/trades')) {
         if (!me) return json({ error: '로그인이 필요합니다.' }, 401, env, origin);

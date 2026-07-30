@@ -3,11 +3,13 @@
 -- PBKDF2(SHA-256, 10만회) 해시 + 계정마다 다른 salt 로만 남긴다.
 
 CREATE TABLE IF NOT EXISTS users (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  username    TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-  pw_hash     TEXT    NOT NULL,
-  pw_salt     TEXT    NOT NULL,
-  created_at  INTEGER NOT NULL
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  username       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  pw_hash        TEXT    NOT NULL,
+  pw_salt        TEXT    NOT NULL,
+  created_at     INTEGER NOT NULL,
+  is_admin       INTEGER NOT NULL DEFAULT 0,   -- 최초 가입자가 관리자
+  must_change_pw INTEGER NOT NULL DEFAULT 0    -- 관리자가 발급한 임시 비밀번호 상태
 );
 
 CREATE TABLE IF NOT EXISTS sessions (

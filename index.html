@@ -433,6 +433,29 @@
   .auth-switch{padding:10px 16px 16px; font-size:var(--fs-xs); color:var(--muted); text-align:center}
   .auth-switch button{background:none; border:0; color:var(--accent); font-weight:800; cursor:pointer;
     font-size:var(--fs-xs); font-family:var(--sans); text-decoration:underline; padding:0 0 0 4px}
+  .auth-submit + .auth-submit{margin-top:8px}
+  .auth-submit.sec{background:var(--panel-2); color:var(--text); border:1px solid var(--line)}
+  .auth-submit.sec:hover{border-color:var(--accent); color:var(--accent)}
+  .auth-submit.ghost{background:none; color:var(--muted); border:1px solid var(--line)}
+  .auth-submit.ghost:hover{color:var(--text)}
+  .acct-who{display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap}
+  .acct-who b{font-size:var(--fs-md); font-weight:800; overflow-wrap:anywhere}
+  .acct-role{font-size:var(--fs-xs); font-weight:800; color:#fff; background:var(--accent);
+    border-radius:4px; padding:2px 6px}
+  .adm-list{max-height:320px; overflow-y:auto; margin-bottom:10px;
+    border:1px solid var(--line-weak); border-radius:6px}
+  .adm-row{display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--line-weak)}
+  .adm-row:last-child{border-bottom:0}
+  .adm-name{flex:1; min-width:0; font-size:var(--fs-xs); font-weight:700; overflow-wrap:anywhere}
+  .adm-name small{display:block; color:var(--muted-2); font-weight:600; margin-top:2px}
+  .adm-act{background:var(--panel); border:1px solid var(--line); color:var(--muted); border-radius:5px;
+    padding:4px 8px; font-size:var(--fs-xs); font-weight:700; cursor:pointer; font-family:var(--sans); flex:none}
+  .adm-act:hover{border-color:var(--accent); color:var(--accent)}
+  .adm-act.danger:hover{border-color:var(--down); color:var(--down)}
+  .adm-temp{background:var(--panel-2); border:1px solid var(--accent); border-radius:6px;
+    padding:10px; margin-bottom:10px; font-size:var(--fs-xs); line-height:1.7}
+  .adm-temp code{display:block; font-family:var(--mono,monospace); font-size:var(--fs-md); font-weight:800;
+    color:var(--text); margin-top:4px; letter-spacing:.04em; overflow-wrap:anywhere}
 
   .drawer-overlay{position:fixed; inset:0; background:rgba(15,22,38,.4); opacity:0; visibility:hidden;
     transition:opacity .25s, visibility .25s; z-index:70}
@@ -824,17 +847,47 @@
       <b id="authTitle">로그인</b>
       <button class="drawer-close" id="authClose" aria-label="닫기">✕</button>
     </div>
-    <form id="authForm" class="auth-form" autocomplete="on">
-      <label class="auth-lab" for="authUser">아이디</label>
-      <input class="auth-inp" type="text" id="authUser" autocomplete="username" maxlength="20" />
-      <label class="auth-lab" for="authPw">비밀번호</label>
-      <input class="auth-inp" type="password" id="authPw" autocomplete="current-password" />
-      <div class="auth-msg" id="authMsg"></div>
-      <button class="auth-submit" type="submit" id="authSubmit">로그인</button>
+    <!-- 로그인 / 회원가입 -->
+    <div id="paneAuth">
+      <form id="authForm" class="auth-form" autocomplete="on">
+        <label class="auth-lab" for="authUser">아이디</label>
+        <input class="auth-inp" type="text" id="authUser" autocomplete="username" maxlength="20" />
+        <label class="auth-lab" for="authPw">비밀번호</label>
+        <input class="auth-inp" type="password" id="authPw" autocomplete="current-password" />
+        <div class="auth-msg" id="authMsg"></div>
+        <button class="auth-submit" type="submit" id="authSubmit">로그인</button>
+      </form>
+      <div class="auth-switch">
+        <span id="authSwitchTxt">계정이 없으신가요?</span>
+        <button type="button" id="authSwitch">회원가입</button>
+      </div>
+    </div>
+
+    <!-- 계정 메뉴 -->
+    <div id="paneAcct" class="auth-form" hidden>
+      <div class="acct-who"><b id="acctWho">—</b><span class="acct-role" id="acctRole"></span></div>
+      <div class="auth-msg" id="acctMsg"></div>
+      <button class="auth-submit sec" type="button" id="btnChangePw">비밀번호 변경</button>
+      <button class="auth-submit sec" type="button" id="btnAdmin" hidden>사용자 관리</button>
+      <button class="auth-submit ghost" type="button" id="btnLogout">로그아웃</button>
+    </div>
+
+    <!-- 비밀번호 변경 -->
+    <form id="paneChangePw" class="auth-form" hidden autocomplete="off">
+      <label class="auth-lab" for="pwCur">현재 비밀번호</label>
+      <input class="auth-inp" type="password" id="pwCur" autocomplete="current-password" />
+      <label class="auth-lab" for="pwNew">새 비밀번호</label>
+      <input class="auth-inp" type="password" id="pwNew" autocomplete="new-password" placeholder="8자 이상" />
+      <div class="auth-msg" id="pwMsg"></div>
+      <button class="auth-submit" type="submit" id="pwSubmit">변경하기</button>
+      <button class="auth-submit ghost" type="button" id="pwBack">뒤로</button>
     </form>
-    <div class="auth-switch">
-      <span id="authSwitchTxt">계정이 없으신가요?</span>
-      <button type="button" id="authSwitch">회원가입</button>
+
+    <!-- 사용자 관리 (관리자) -->
+    <div id="paneAdmin" class="auth-form" hidden>
+      <div class="auth-msg" id="admMsg"></div>
+      <div class="adm-list" id="admList"></div>
+      <button class="auth-submit ghost" type="button" id="admBack">뒤로</button>
     </div>
   </div>
 </div>
@@ -1468,7 +1521,7 @@ function updateCompare(){
    프론트가 API와 다른 출처(GitHub Pages ↔ workers.dev)에 있어 크로스 오리진 쿠키를
    피하려고 Bearer 토큰을 쓴다. 토큰은 localStorage에 두고 세션은 서버가 만료시킨다. */
 const TOKEN_KEY = 'ct_token';
-let auth = { token: localStorage.getItem(TOKEN_KEY) || null, username: null };
+let auth = { token: localStorage.getItem(TOKEN_KEY) || null, username: null, isAdmin: false, mustChangePw: false };
 let authMode = 'login';
 const escHtml = s => String(s).replace(/[&<>"']/g, c =>
   ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -1484,8 +1537,9 @@ async function api(path, opts = {}){
   if(!res.ok) throw new Error((data && data.error) || `요청 실패 (${res.status})`);
   return data;
 }
-function setAuth(token, username){
-  auth = { token: token || null, username: username || null };
+function setAuth(token, username, extra = {}){
+  auth = { token: token || null, username: username || null,
+           isAdmin: !!extra.isAdmin, mustChangePw: !!extra.mustChangePw };
   if(token) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY);
   renderAcct();
   loadTrades();
@@ -1509,8 +1563,30 @@ function renderAcct(){
     : '로그인하면 교환 기록을 계정에 저장합니다';
   updateSaveRow();
 }
+// 모달 안에서 화면만 갈아 끼운다 (로그인 · 계정 · 비밀번호 변경 · 사용자 관리)
+function showPane(name){
+  const panes = { auth:'로그인', acct:'계정', pw:'비밀번호 변경', admin:'사용자 관리' };
+  ['paneAuth','paneAcct','paneChangePw','paneAdmin'].forEach(id=>{ document.getElementById(id).hidden = true; });
+  document.getElementById({ auth:'paneAuth', acct:'paneAcct', pw:'paneChangePw', admin:'paneAdmin' }[name]).hidden = false;
+  if(name !== 'auth') document.getElementById('authTitle').textContent = panes[name];
+  ['authMsg','acctMsg','pwMsg','admMsg'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=''; });
+}
+function openAccount(){
+  document.getElementById('authModal').hidden = false;
+  document.getElementById('acctWho').textContent = auth.username;
+  const role = document.getElementById('acctRole');
+  role.textContent = auth.isAdmin ? '관리자' : '';
+  role.hidden = !auth.isAdmin;
+  document.getElementById('btnAdmin').hidden = !auth.isAdmin;
+  showPane('acct');
+  if(auth.mustChangePw){
+    showPane('pw');
+    document.getElementById('pwMsg').textContent = '임시 비밀번호로 로그인했습니다. 새 비밀번호를 정해 주세요.';
+  }
+}
 function setAuthMode(mode){
   authMode = mode;
+  showPane('auth');
   const login = mode === 'login';
   document.getElementById('authTitle').textContent   = login ? '로그인' : '회원가입';
   document.getElementById('authSubmit').textContent  = login ? '로그인' : '가입하고 시작하기';
@@ -1536,9 +1612,13 @@ async function submitAuth(e){
   try{
     const r = await api(authMode === 'login' ? '/api/auth/login' : '/api/auth/register',
                         { method:'POST', body:{ username, password } });
-    setAuth(r.token, r.username);
-    closeAuth();
-    toastSimple(`${r.username}님, 로그인되었습니다`);
+    setAuth(r.token, r.username, r);
+    if(r.mustChangePw){                       // 임시 비밀번호면 바로 변경 화면으로
+      openAccount();
+    }else{
+      closeAuth();
+      toastSimple(`${r.username}님, 로그인되었습니다`);
+    }
   }catch(err){
     msg.textContent = err.message;
   }finally{ btn.disabled = false; }
@@ -1553,12 +1633,73 @@ async function restoreSession(){
   try{
     const me = await api('/api/auth/me');
     auth.username = me.username;
+    auth.isAdmin = !!me.isAdmin;
+    auth.mustChangePw = !!me.mustChangePw;
   }catch(_){                                  // 만료·위조 토큰이면 조용히 정리
-    auth = { token:null, username:null };
+    auth = { token:null, username:null, isAdmin:false, mustChangePw:false };
     localStorage.removeItem(TOKEN_KEY);
   }
   renderAcct();
   loadTrades();
+}
+
+async function submitChangePw(e){
+  e.preventDefault();
+  const cur = document.getElementById('pwCur').value;
+  const next = document.getElementById('pwNew').value;
+  const msg = document.getElementById('pwMsg'), btn = document.getElementById('pwSubmit');
+  msg.className = 'auth-msg'; btn.disabled = true;
+  try{
+    await api('/api/auth/change-password', { method:'POST', body:{ current: cur, next } });
+    auth.mustChangePw = false;
+    document.getElementById('pwCur').value = ''; document.getElementById('pwNew').value = '';
+    closeAuth();
+    toastSimple('비밀번호를 변경했습니다');
+  }catch(err){
+    msg.textContent = err.message;
+  }finally{ btn.disabled = false; }
+}
+
+/* ---------- 사용자 관리 (관리자) ----------
+   이메일 발송 수단이 없으므로 분실 시 관리자가 임시 비밀번호를 발급하고
+   직접 전달한다. 임시 비밀번호는 서버에 남지 않고 이 화면에서 한 번만 보인다. */
+function renderAdminList(users){
+  document.getElementById('admList').innerHTML = users.map(u => {
+    const d = new Date(u.created_at), p2 = n => String(n).padStart(2,'0');
+    const isMe = u.username === auth.username;   // 본인은 재설정·삭제 대상이 아니다
+    return `<div class="adm-row">
+      <span class="adm-name">${escHtml(u.username)}${u.is_admin ? ' <span class="acct-role">관리자</span>' : ''}
+        <small>가입 ${d.getFullYear()}.${p2(d.getMonth()+1)}.${p2(d.getDate())} · 기록 ${u.trade_count}건`
+        + `${u.must_change_pw ? ' · 임시 비밀번호 상태' : ''}</small></span>
+      ${isMe ? '' : `<button class="adm-act" data-reset="${u.id}">재설정</button>
+                     <button class="adm-act danger" data-del="${u.id}" data-name="${escHtml(u.username)}">삭제</button>`}
+    </div>`;
+  }).join('');
+}
+async function loadAdminUsers(){
+  try{
+    renderAdminList((await api('/api/admin/users')).users || []);
+  }catch(e){
+    document.getElementById('admList').innerHTML =
+      `<div class="adm-row"><span class="adm-name">${escHtml(e.message)}</span></div>`;
+  }
+}
+async function openAdmin(){
+  showPane('admin');
+  document.getElementById('admList').innerHTML = '<div class="adm-row"><span class="adm-name">불러오는 중…</span></div>';
+  await loadAdminUsers();
+}
+async function adminReset(id){
+  const msg = document.getElementById('admMsg');
+  msg.className = 'auth-msg';
+  try{
+    const r = await api('/api/admin/reset-password', { method:'POST', body:{ user_id:+id } });
+    // 임시 비밀번호는 서버에 남지 않는다 — 이 화면이 유일한 전달 기회다
+    msg.className = 'auth-msg ok';
+    msg.innerHTML = `<div class="adm-temp"><b>${escHtml(r.username)}</b> 님의 임시 비밀번호입니다. `
+                  + `지금 복사해 전달하세요 — 다시 볼 수 없습니다.<code>${escHtml(r.password)}</code></div>`;
+    await loadAdminUsers();                    // 안내는 남기고 목록만 갱신
+  }catch(e){ msg.className = 'auth-msg'; msg.textContent = e.message; }
 }
 
 /* ---------- 트레이드 기록 ---------- */
@@ -1907,9 +2048,25 @@ function bindUI(){
     updateSwap();
   });
   // 계정
-  document.getElementById('acctBtn').addEventListener('click', ()=>{
-    if(auth.username){ if(confirm(`${auth.username} 계정에서 로그아웃할까요?`)) logout(); }
-    else openAuth();
+  document.getElementById('acctBtn').addEventListener('click', ()=> auth.username ? openAccount() : openAuth());
+  document.getElementById('btnChangePw').addEventListener('click', ()=> showPane('pw'));
+  document.getElementById('btnAdmin').addEventListener('click', openAdmin);
+  document.getElementById('btnLogout').addEventListener('click', ()=>{ closeAuth(); logout(); });
+  document.getElementById('paneChangePw').addEventListener('submit', submitChangePw);
+  document.getElementById('pwBack').addEventListener('click', ()=> showPane('acct'));
+  document.getElementById('admBack').addEventListener('click', ()=> showPane('acct'));
+  document.getElementById('admList').addEventListener('click', async e=>{
+    const rst = e.target.closest('button[data-reset]');
+    if(rst){
+      if(confirm('임시 비밀번호를 발급할까요? 해당 계정은 즉시 로그아웃되고 기존 비밀번호는 쓸 수 없게 됩니다.')) adminReset(rst.dataset.reset);
+      return;
+    }
+    const del = e.target.closest('button[data-del]');
+    if(del){
+      if(!confirm(`${del.dataset.name} 계정을 삭제할까요? 이 계정의 트레이드 기록도 함께 지워집니다.`)) return;
+      try{ await api('/api/admin/users/' + del.dataset.del, { method:'DELETE' }); await loadAdminUsers(); toastSimple('계정을 삭제했습니다'); }
+      catch(err){ document.getElementById('admMsg').textContent = err.message; }
+    }
   });
   document.getElementById('authClose').addEventListener('click', closeAuth);
   document.getElementById('authModal').addEventListener('click', e=>{ if(e.target.id === 'authModal') closeAuth(); });
