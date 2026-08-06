@@ -121,24 +121,46 @@ async function issueSession(env, userId) {
   return token;
 }
 
-async function handleRegister(request, env, origin) {
+async function userCount(env) {
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first();
+  return r ? r.n : 0;
+}
+
+/* 공개 회원가입은 없다. 계정은 관리자가 발급한다.
+   다만 최초의 관리자 하나는 어딘가에서 생겨야 하므로, 계정이 0개일 때만
+   이 경로가 열린다. 첫 계정이 만들어지는 순간 영구히 닫힌다. */
+async function handleBootstrap(request, env, origin) {
+  if (await userCount(env) > 0)
+    return json({ error: '가입은 닫혀 있습니다. 관리자에게 계정 발급을 요청하세요.' }, 403, env, origin);
+
   const { username, password } = await request.json().catch(() => ({}));
   const bad = checkCredentials(username, password);
   if (bad) return json({ error: bad }, 400, env, origin);
 
+  const { hash, salt } = await hashPassword(password);
+  const res = await env.DB.prepare(
+    'INSERT INTO users (username, pw_hash, pw_salt, created_at, is_admin) VALUES (?,?,?,?,1)')
+    .bind(username, hash, salt, Date.now()).run();
+  return json({ token: await issueSession(env, res.meta.last_row_id), username, isAdmin: true }, 200, env, origin);
+}
+
+/* 관리자의 계정 발급 — 비밀번호는 서버가 만들어 응답에서 한 번만 보여 준다.
+   받는 사람은 임시 비밀번호로 첫 로그인한 뒤 반드시 자기 것으로 바꾸게 된다. */
+async function createUser(request, env, origin) {
+  const { username, is_admin } = await request.json().catch(() => ({}));
+  if (typeof username !== 'string' || !/^[A-Za-z0-9가-힣_-]{3,20}$/.test(username))
+    return json({ error: '아이디는 3~20자의 한글·영문·숫자·_- 만 가능합니다.' }, 400, env, origin);
+
   const dup = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
   if (dup) return json({ error: '이미 사용 중인 아이디입니다.' }, 409, env, origin);
 
-  // 최초 가입자를 관리자로 삼는다 — 비밀번호 재설정을 해 줄 사람이 하나는 있어야 한다
-  const first = await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first();
-  const isAdmin = first.n === 0 ? 1 : 0;
-
-  const { hash, salt } = await hashPassword(password);
-  const res = await env.DB.prepare(
-    'INSERT INTO users (username, pw_hash, pw_salt, created_at, is_admin) VALUES (?,?,?,?,?)')
-    .bind(username, hash, salt, Date.now(), isAdmin).run();
-  const userId = res.meta.last_row_id;
-  return json({ token: await issueSession(env, userId), username, isAdmin: !!isAdmin }, 200, env, origin);
+  const pw = tempPassword();
+  const { hash, salt } = await hashPassword(pw);
+  await env.DB.prepare(
+    `INSERT INTO users (username, pw_hash, pw_salt, created_at, is_admin, must_change_pw)
+     VALUES (?,?,?,?,?,1)`)
+    .bind(username, hash, salt, Date.now(), is_admin ? 1 : 0).run();
+  return json({ username, password: pw, isAdmin: !!is_admin }, 200, env, origin);
 }
 
 /* ---------- 비밀번호 변경 / 관리자 재설정 ---------- */
@@ -223,7 +245,11 @@ async function listTrades(env, origin, me) {
             from_price, to_price, quote, fee_applied, memo
        FROM trades WHERE user_id = ? ORDER BY traded_at DESC, id DESC LIMIT 500`)
     .bind(me.userId).all();
-  return json({ trades: results || [] }, 200, env, origin);
+  // 기록은 계정에 계속 쌓이지만 화면에는 500건까지만 내려간다.
+  // 전체 건수를 함께 주어 "잘렸다"는 사실이 조용히 묻히지 않게 한다.
+  const cnt = await env.DB.prepare('SELECT COUNT(*) AS n FROM trades WHERE user_id = ?')
+    .bind(me.userId).first();
+  return json({ trades: results || [], total: cnt ? cnt.n : (results || []).length }, 200, env, origin);
 }
 
 async function createTrade(request, env, origin, me) {
@@ -267,7 +293,10 @@ export default {
         if (request.method !== 'GET') return json({ error: 'method' }, 405, env, origin);
         return await proxyUpbit(url, env, ctx, origin);
       }
-      if (p === '/api/auth/register' && request.method === 'POST') return await handleRegister(request, env, origin);
+      // 계정이 하나도 없을 때만 최초 관리자를 만들 수 있다 (프론트가 화면을 가르는 근거)
+      if (p === '/api/auth/bootstrap' && request.method === 'GET')
+        return json({ needed: await userCount(env) === 0 }, 200, env, origin);
+      if (p === '/api/auth/register' && request.method === 'POST') return await handleBootstrap(request, env, origin);
       if (p === '/api/auth/login'    && request.method === 'POST') return await handleLogin(request, env, origin);
 
       // 이하 로그인 필요
@@ -288,7 +317,8 @@ export default {
       if (p.startsWith('/api/admin/')) {
         if (!me) return json({ error: '로그인이 필요합니다.' }, 401, env, origin);
         if (!me.isAdmin) return json({ error: '관리자만 사용할 수 있습니다.' }, 403, env, origin);
-        if (p === '/api/admin/users' && request.method === 'GET') return await listUsers(env, origin);
+        if (p === '/api/admin/users' && request.method === 'GET')  return await listUsers(env, origin);
+        if (p === '/api/admin/users' && request.method === 'POST') return await createUser(request, env, origin);
         if (p === '/api/admin/reset-password' && request.method === 'POST') return await resetPassword(request, env, origin, me);
         const du = p.match(/^\/api\/admin\/users\/(\d+)$/);
         if (du && request.method === 'DELETE') return await deleteUser(env, origin, me, +du[1]);

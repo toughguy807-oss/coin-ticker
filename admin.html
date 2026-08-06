@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>관리자 · 코인 시세 터미널</title>
+<style>
+  /* ============ 테마 토큰 — 시세 화면(index.html)과 동일 계열 ============ */
+  :root{
+    --gnb:#0b3a86; --gnb-text:#ffffff;
+    --bg:#f4f5f8; --panel:#ffffff; --panel-2:#f7f9fc;
+    --line:#e6e9ef; --line-weak:#eef1f6;
+    --text:#1e2430; --muted:#666f7e; --muted-2:#9aa2b1;
+    --up:#d24f45; --down:#1261c4; --accent:#0b3a86; --star:#e5a50a;
+    --radius:8px; color-scheme:light;
+    --fs-2xs:10px; --fs-xs:11px; --fs-sm:12px; --fs-base:13px;
+    --fs-md:15px; --fs-lg:17px; --fs-xl:24px; --fs-2xl:30px;
+    --sans:-apple-system,"Pretendard","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic","Segoe UI",BlinkMacSystemFont,system-ui,sans-serif;
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --gnb:#111b2e; --bg:#0d1017; --panel:#151a23; --panel-2:#1b2130;
+    --line:#242b38; --line-weak:#1e2532;
+    --text:#e7ebf2; --muted:#8d95a6; --muted-2:#5d6473;
+    --up:#e8535a; --down:#4a8af4; --accent:#4a8af4;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; font-size:var(--fs-base); line-height:1.45;
+    padding-top:56px; word-break:keep-all; overflow-wrap:anywhere;
+  }
+  .num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; letter-spacing:-.01em}
+  button,input{font-family:var(--sans)}
+
+  /* ============ GNB ============ */
+  .gnb{position:fixed; top:0; left:0; right:0; z-index:50; height:56px;
+    background:var(--gnb); color:var(--gnb-text);
+    display:flex; align-items:center; gap:12px; padding:0 20px}
+  .gnb .brand{display:flex; align-items:center; gap:9px; font-weight:800; font-size:var(--fs-lg); letter-spacing:-.02em}
+  .gnb .brand svg{display:block}
+  .tag{font-size:var(--fs-2xs); font-weight:800; letter-spacing:.06em; background:rgba(255,255,255,.18);
+    border:1px solid rgba(255,255,255,.28); border-radius:4px; padding:2px 6px}
+  .gnb .spacer{flex:1}
+  .who{font-size:var(--fs-sm); color:rgba(255,255,255,.82); font-weight:700; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; max-width:180px}
+  .gnb-btn{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff;
+    border-radius:6px; padding:6px 10px; font-size:var(--fs-xs); font-weight:700; cursor:pointer;
+    text-decoration:none; display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+  .gnb-btn:hover{background:rgba(255,255,255,.22)}
+  .icon-btn{width:34px; height:34px; padding:0; justify-content:center}
+  .icon-btn svg{display:block}
+  :root:not([data-theme="dark"]) .ic-sun{display:none}
+  :root[data-theme="dark"] .ic-moon{display:none}
+
+  /* ============ 레이아웃 ============ */
+  .wrap{max-width:960px; margin:0 auto; padding:18px 16px 60px; display:flex; flex-direction:column; gap:14px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius)}
+  .card-head{display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--line-weak); flex-wrap:wrap}
+  .card-head h2{margin:0; font-size:var(--fs-md); font-weight:800; letter-spacing:-.01em}
+  .card-head .hint{font-size:var(--fs-xs); color:var(--muted); font-weight:600}
+  .card-body{padding:16px 18px 18px}
+
+  /* ---- 게이트 (로그인/권한) ---- */
+  .gate{display:grid; place-items:center; min-height:60vh; padding:20px}
+  .gate-box{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:28px 26px; width:360px; max-width:100%; text-align:center}
+  .gate-box h1{margin:0 0 8px; font-size:var(--fs-lg); font-weight:800}
+  .gate-box p{margin:0 0 18px; font-size:var(--fs-sm); color:var(--muted); line-height:1.7}
+  .gate-box .go{display:inline-block; background:var(--accent); color:#fff; border:0; border-radius:6px;
+    padding:10px 18px; font-size:var(--fs-base); font-weight:800; cursor:pointer; text-decoration:none}
+
+  /* ---- 통계 ---- */
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+  @media (max-width:640px){ .stats{grid-template-columns:repeat(2,1fr)} }
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px}
+  .stat .k{font-size:var(--fs-xs); color:var(--muted); font-weight:700}
+  .stat .v{font-size:var(--fs-xl); font-weight:800; margin-top:4px; letter-spacing:-.02em}
+  .stat.warn .v{color:var(--star)}
+
+  /* ---- 폼 ---- */
+  .lab{font-size:var(--fs-xs); color:var(--muted); font-weight:700; margin-bottom:6px; display:block}
+  .inp{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:9px 11px;
+    font-size:var(--fs-base); color:var(--text); outline:none; width:100%; min-width:0}
+  .inp:focus{border-color:var(--accent)}
+  .row{display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap}
+  .row .inp{flex:1; min-width:180px}
+  .btn{background:var(--accent); color:#fff; border:0; border-radius:6px; padding:9px 16px;
+    font-size:var(--fs-sm); font-weight:800; cursor:pointer; white-space:nowrap}
+  .btn:disabled{opacity:.5; cursor:default}
+  .check{display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-xs); color:var(--muted);
+    font-weight:700; cursor:pointer; user-select:none; margin-top:10px}
+  .check input{accent-color:var(--accent); cursor:pointer}
+  .msg{font-size:var(--fs-xs); font-weight:700; color:var(--down); min-height:16px; margin-top:10px; overflow-wrap:anywhere}
+  .msg.ok{color:var(--up)}
+  .temp{background:var(--panel-2); border:1px solid var(--accent); border-radius:6px;
+    padding:12px 14px; margin-top:10px; font-size:var(--fs-xs); line-height:1.75; color:var(--text); font-weight:600}
+  .temp code{display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:var(--fs-lg);
+    font-weight:800; margin-top:6px; letter-spacing:.06em; overflow-wrap:anywhere}
+
+  /* ---- 사용자 표 ---- */
+  .tbl-wrap{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; font-size:var(--fs-sm)}
+  th{color:var(--muted); font-weight:700; text-align:left; padding:9px 14px;
+    border-bottom:1px solid var(--line-weak); white-space:nowrap; font-size:var(--fs-xs)}
+  td{padding:11px 14px; border-bottom:1px solid var(--line-weak); vertical-align:middle}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--panel-2)}
+  .u-name{font-weight:800; overflow-wrap:anywhere}
+  .u-me{font-size:var(--fs-2xs); color:var(--muted-2); font-weight:700; margin-left:5px}
+  .badge{display:inline-block; font-size:var(--fs-2xs); font-weight:800; border-radius:4px; padding:2px 6px; white-space:nowrap}
+  .badge.admin{background:var(--accent); color:#fff}
+  .badge.user{background:var(--panel-2); color:var(--muted); border:1px solid var(--line)}
+  .badge.temp{background:rgba(229,165,10,.16); color:var(--star); border:1px solid rgba(229,165,10,.4)}
+  .badge.ok{background:var(--panel-2); color:var(--muted-2); border:1px solid var(--line-weak)}
+  .acts{text-align:right; white-space:nowrap}
+  .act{background:var(--panel); border:1px solid var(--line); color:var(--muted); border-radius:5px;
+    padding:5px 10px; font-size:var(--fs-xs); font-weight:700; cursor:pointer; margin-left:5px}
+  .act:hover{border-color:var(--accent); color:var(--accent)}
+  .act.danger:hover{border-color:var(--down); color:var(--down)}
+  .empty{padding:26px; text-align:center; color:var(--muted-2); font-size:var(--fs-sm)}
+  .foot{color:var(--muted-2); font-size:var(--fs-xs); text-align:center; padding-top:6px; line-height:1.8}
+
+  /* ---- 토스트 ---- */
+  .toast-wrap{position:fixed; top:66px; right:16px; z-index:60; display:flex; flex-direction:column; gap:8px; max-width:340px}
+  .toast{background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:8px; padding:11px 14px; font-size:var(--fs-sm); font-weight:700;
+    box-shadow:0 8px 24px rgba(15,22,38,.16); transform:translateX(120%); opacity:0;
+    transition:transform .28s cubic-bezier(.22,1,.36,1), opacity .28s}
+  .toast.show{transform:translateX(0); opacity:1}
+</style>
+</head>
+<body>
+
+<header class="gnb">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <rect x="1" y="1" width="18" height="18" rx="4" fill="rgba(255,255,255,.16)"/>
+      <rect x="5" y="9" width="2.4" height="6" rx="1" fill="#fff"/>
+      <rect x="8.8" y="5" width="2.4" height="10" rx="1" fill="#fff"/>
+      <rect x="12.6" y="7" width="2.4" height="8" rx="1" fill="#fff"/>
+    </svg>
+    코인 시세 <span class="tag">ADMIN</span>
+  </div>
+  <div class="spacer"></div>
+  <span class="who" id="who" hidden></span>
+  <a class="gnb-btn" href="index.html">시세 화면</a>
+  <button class="gnb-btn" id="logoutBtn" hidden>로그아웃</button>
+  <button class="gnb-btn icon-btn" id="themeBtn" title="라이트/다크 전환" aria-label="테마 전환">
+    <svg class="ic-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <svg class="ic-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+  </button>
+</header>
+
+<!-- 접근 게이트: 비로그인 / 일반 계정 / 임시 비밀번호 상태 -->
+<div class="gate" id="gate" hidden>
+  <div class="gate-box">
+    <h1 id="gateTitle">확인 중…</h1>
+    <p id="gateMsg"></p>
+    <a class="go" id="gateGo" href="index.html">시세 화면으로</a>
+  </div>
+</div>
+
+<main class="wrap" id="main" hidden>
+
+  <section class="stats">
+    <div class="stat"><div class="k">전체 계정</div><div class="v num" id="stTotal">—</div></div>
+    <div class="stat"><div class="k">관리자</div><div class="v num" id="stAdmin">—</div></div>
+    <div class="stat warn"><div class="k">임시 비밀번호 대기</div><div class="v num" id="stTemp">—</div></div>
+    <div class="stat"><div class="k">누적 거래기록</div><div class="v num" id="stTrades">—</div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>계정 발급</h2>
+      <span class="hint">공개 회원가입은 없습니다 · 임시 비밀번호는 발급 직후 한 번만 표시됩니다</span>
+    </div>
+    <div class="card-body">
+      <label class="lab" for="newUser">아이디</label>
+      <div class="row">
+        <input class="inp" type="text" id="newUser" maxlength="20" placeholder="3~20자 · 한글·영문·숫자·_-" autocomplete="off" />
+        <button class="btn" type="button" id="createBtn">발급</button>
+      </div>
+      <label class="check"><input type="checkbox" id="newIsAdmin" /><span>관리자 권한으로 발급</span></label>
+      <div class="msg" id="createMsg"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>사용자</h2>
+      <span class="hint" id="listHint"></span>
+      <div class="spacer" style="flex:1"></div>
+      <input class="inp" type="text" id="search" placeholder="아이디 검색" style="width:180px; flex:none" autocomplete="off" />
+    </div>
+    <div class="msg" id="listMsg" style="padding:0 18px"></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>아이디</th><th>권한</th><th>상태</th><th>가입일</th><th>거래기록</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="listEmpty" hidden>표시할 계정이 없습니다.</div>
+  </section>
+
+  <div class="foot">비밀번호는 PBKDF2 해시로만 저장되며 원문은 서버에 남지 않습니다 · 재설정 시 해당 계정의 모든 세션이 즉시 끊깁니다</div>
+</main>
+
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* 관리자 콘솔 — 시세 화면과 같은 출처에 있으므로 로그인 토큰(localStorage)을 그대로 쓴다.
+   계정 생성/재설정/삭제는 전부 서버가 관리자 여부를 다시 확인하므로, 이 화면의 게이트는
+   접근 편의를 위한 것이지 보안 경계가 아니다. */
+const API_BASE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ? 'http://127.0.0.1:8787'
+  : 'https://coin-ticker-api.jun-test.workers.dev';
+const TOKEN_KEY = 'ct_token';
+let token = localStorage.getItem(TOKEN_KEY) || null;
+let me = null, users = [];
+
+const $ = id => document.getElementById(id);
+const escHtml = s => String(s).replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+async function api(path, opts = {}){
+  const res = await fetch(API_BASE + path, {
+    method: opts.method || 'GET',
+    headers: { 'Content-Type':'application/json', ...(token ? { Authorization:'Bearer '+token } : {}) },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  let data = null; try{ data = await res.json(); }catch(_){}
+  if(!res.ok) throw new Error((data && data.error) || `요청 실패 (${res.status})`);
+  return data;
+}
+
+function toast(text){
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = text;
+  $('toastWrap').appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 300); }, 3500);
+}
+
+function showGate(title, msg){
+  $('main').hidden = true;
+  $('gate').hidden = false;
+  $('gateTitle').textContent = title;
+  $('gateMsg').textContent = msg;
+}
+
+/* ---------- 사용자 목록 ---------- */
+const p2 = n => String(n).padStart(2,'0');
+const fmtDate = ts => { const d = new Date(ts); return `${d.getFullYear()}.${p2(d.getMonth()+1)}.${p2(d.getDate())}`; };
+
+function renderStats(){
+  const total = users.length;
+  const admins = users.filter(u => u.is_admin).length;
+  const temps  = users.filter(u => u.must_change_pw).length;
+  const trades = users.reduce((s,u) => s + (u.trade_count||0), 0);
+  $('stTotal').textContent  = total.toLocaleString('ko-KR');
+  $('stAdmin').textContent  = admins.toLocaleString('ko-KR');
+  $('stTemp').textContent   = temps.toLocaleString('ko-KR');
+  $('stTrades').textContent = trades.toLocaleString('ko-KR');
+}
+
+function renderUsers(){
+  const q = $('search').value.trim().toLowerCase();
+  const list = q ? users.filter(u => u.username.toLowerCase().includes(q)) : users;
+  $('listHint').textContent = q ? `${list.length}명 / 전체 ${users.length}명` : `${users.length}명`;
+  $('listEmpty').hidden = list.length > 0;
+  $('rows').innerHTML = list.map(u => {
+    const isMe = me && u.id === me.id;
+    return `<tr data-id="${u.id}" data-name="${escHtml(u.username)}">
+      <td><span class="u-name">${escHtml(u.username)}</span>${isMe ? '<span class="u-me">나</span>' : ''}</td>
+      <td><span class="badge ${u.is_admin ? 'admin' : 'user'}">${u.is_admin ? '관리자' : '일반'}</span></td>
+      <td><span class="badge ${u.must_change_pw ? 'temp' : 'ok'}">${u.must_change_pw ? '임시 비밀번호' : '정상'}</span></td>
+      <td class="num">${fmtDate(u.created_at)}</td>
+      <td class="num">${(u.trade_count||0).toLocaleString('ko-KR')}건</td>
+      <td class="acts">${isMe ? '<span class="u-me">본인 계정</span>'
+        : `<button class="act" data-act="reset">비밀번호 재설정</button>
+           <button class="act danger" data-act="del">삭제</button>`}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadUsers(){
+  try{
+    users = (await api('/api/admin/users')).users || [];
+    $('listMsg').textContent = '';
+    renderStats(); renderUsers();
+  }catch(e){
+    $('listMsg').className = 'msg';
+    $('listMsg').textContent = e.message;
+  }
+}
+
+/* ---------- 계정 발급 / 재설정 / 삭제 ---------- */
+// 임시 비밀번호는 서버에 남지 않는다 — 이 화면이 유일한 전달 기회다
+function showTemp(msgEl, headline, username, password){
+  msgEl.className = 'msg ok';
+  msgEl.innerHTML = `<div class="temp"><b>${escHtml(username)}</b> ${headline}`
+                  + ` 아래 임시 비밀번호를 지금 복사해 전달하세요 — 다시 볼 수 없습니다.`
+                  + `<code>${escHtml(password)}</code></div>`;
+}
+
+async function createUser(){
+  const inp = $('newUser'), msg = $('createMsg');
+  const username = inp.value.trim();
+  if(!username){ msg.className = 'msg'; msg.textContent = '발급할 아이디를 입력해 주세요.'; return; }
+  const isAdmin = $('newIsAdmin').checked;
+  const btn = $('createBtn'); btn.disabled = true;
+  try{
+    const r = await api('/api/admin/users', { method:'POST', body:{ username, is_admin:isAdmin } });
+    inp.value = ''; $('newIsAdmin').checked = false;
+    showTemp(msg, `계정을 발급했습니다${r.isAdmin ? ' (관리자)' : ''}.`, r.username, r.password);
+    toast(`${r.username} 계정을 발급했습니다`);
+    await loadUsers();
+  }catch(e){ msg.className = 'msg'; msg.textContent = e.message; }
+  finally{ btn.disabled = false; }
+}
+
+async function resetUser(id, name){
+  if(!confirm(`${name} 계정의 비밀번호를 재설정할까요?\n기존 비밀번호는 즉시 쓸 수 없게 되고 모든 기기에서 로그아웃됩니다.`)) return;
+  const msg = $('listMsg');
+  try{
+    const r = await api('/api/admin/reset-password', { method:'POST', body:{ user_id:id } });
+    showTemp(msg, '님의 비밀번호를 재설정했습니다.', r.username, r.password);
+    toast(`${r.username} 비밀번호를 재설정했습니다`);
+    await loadUsers();
+  }catch(e){ msg.className = 'msg'; msg.textContent = e.message; }
+}
+
+async function deleteUser(id, name){
+  if(!confirm(`${name} 계정을 삭제할까요?\n이 계정의 트레이드 기록도 함께 지워지며 되돌릴 수 없습니다.`)) return;
+  try{
+    await api('/api/admin/users/' + id, { method:'DELETE' });
+    $('listMsg').textContent = '';
+    toast(`${name} 계정을 삭제했습니다`);
+    await loadUsers();
+  }catch(e){ $('listMsg').className = 'msg'; $('listMsg').textContent = e.message; }
+}
+
+/* ---------- 바인딩 ---------- */
+$('createBtn').addEventListener('click', createUser);
+$('newUser').addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); createUser(); } });
+$('search').addEventListener('input', renderUsers);
+$('rows').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-act]'); if(!btn) return;
+  const tr = btn.closest('tr');
+  const id = +tr.dataset.id, name = tr.dataset.name;
+  if(btn.dataset.act === 'reset') resetUser(id, name); else deleteUser(id, name);
+});
+$('logoutBtn').addEventListener('click', async ()=>{
+  try{ await api('/api/auth/logout', { method:'POST' }); }catch(_){}
+  localStorage.removeItem(TOKEN_KEY);
+  location.href = 'index.html';
+});
+if(localStorage.getItem('coin_theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+$('themeBtn').addEventListener('click', ()=>{
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  localStorage.setItem('coin_theme', dark ? 'dark' : 'light');
+});
+
+/* ---------- 부트스트랩 ---------- */
+(async function init(){
+  if(!token){
+    showGate('로그인이 필요합니다', '시세 화면에서 로그인한 뒤 다시 들어와 주세요.');
+    return;
+  }
+  try{
+    me = await api('/api/auth/me');
+  }catch(_){
+    localStorage.removeItem(TOKEN_KEY);
+    showGate('세션이 만료되었습니다', '시세 화면에서 다시 로그인해 주세요.');
+    return;
+  }
+  if(!me.isAdmin){
+    showGate('접근 권한이 없습니다', `${me.username} 님은 관리자가 아닙니다. 계정 관리는 관리자만 사용할 수 있습니다.`);
+    return;
+  }
+  if(me.mustChangePw){
+    showGate('비밀번호를 먼저 변경해 주세요', '임시 비밀번호로 로그인한 상태입니다. 시세 화면의 계정 메뉴에서 비밀번호를 바꾼 뒤 다시 들어와 주세요.');
+    return;
+  }
+  // 목록을 받아 채운 뒤에 화면을 연다 — 빈 표와 '—' 통계가 잠깐 스치는 걸 막는다
+  try{
+    users = (await api('/api/admin/users')).users || [];
+  }catch(e){
+    showGate('목록을 불러오지 못했습니다', e.message);
+    return;
+  }
+  // 본인 id는 목록에서 역으로 찾는다 (/api/auth/me 는 id를 주지 않는다)
+  const self = users.find(u => u.username === me.username);
+  if(self) me.id = self.id;
+  renderStats(); renderUsers();
+  $('who').textContent = me.username + ' · 관리자';
+  $('who').hidden = false;
+  $('logoutBtn').hidden = false;
+  $('gate').hidden = true;
+  $('main').hidden = false;
+})();
+</script>
+</body>
+</html>

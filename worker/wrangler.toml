@@ -10,3 +10,8 @@ database_id = "ff9eb18c-e5df-47ab-924a-68e41c82cbd9"
 [vars]
 # 프론트가 올라가 있는 출처만 CORS 허용 (쉼표로 여러 개)
 ALLOWED_ORIGINS = "https://toughguy807-oss.github.io,http://localhost:8788,http://127.0.0.1:8788"
+
+# 만료 세션 정리 — src/index.js 의 scheduled() 는 이 트리거가 있어야 실행된다.
+# 매일 19:00 UTC = 한국시간 04:00 (사용이 가장 적은 시간대)
+[triggers]
+crons = ["0 19 * * *"]

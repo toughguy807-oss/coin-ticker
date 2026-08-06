@@ -27,12 +27,14 @@
     --flash-up:rgba(210,79,69,.14);
     --flash-down:rgba(18,97,196,.14);
     --radius:8px;
+    color-scheme:light;        /* datetime-local 등 네이티브 위젯을 테마에 맞춘다 */
     /* type scale (8단계 · 고밀도 터미널 유지 — 근접중복 스냅, 키우지 않음) */
     --fs-2xs:10px; --fs-xs:11px; --fs-sm:12px; --fs-base:13px;
     --fs-md:15px; --fs-lg:17px; --fs-xl:24px; --fs-2xl:30px;
     --sans:-apple-system,"Pretendard","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic","Segoe UI",BlinkMacSystemFont,system-ui,sans-serif;
   }
   :root[data-theme="dark"]{
+    color-scheme:dark;
     --gnb:#111b2e;
     --bg:#0d1017;
     --panel:#151a23;
@@ -237,6 +239,15 @@
     font-size:var(--fs-xs); font-weight:800; cursor:pointer; font-family:var(--sans)}
   .swap-save-btn:disabled{opacity:.5; cursor:default}
   .swap-save-hint{font-size:var(--fs-xs); color:var(--muted); overflow-wrap:anywhere}
+  /* 기록에 남길 거래 시각·메모 — DB에 계정 단위로 누적된다 */
+  .save-fields{display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:1; min-width:0}
+  .save-lab{font-size:var(--fs-xs); color:var(--muted); font-weight:700; flex:none}
+  .save-inp{border:1px solid var(--line); background:var(--panel); color:var(--text); border-radius:6px;
+    padding:6px 9px; font-size:var(--fs-xs); font-weight:700; font-family:var(--sans); outline:none; min-width:0}
+  .save-inp:focus{border-color:var(--accent)}
+  .save-inp.memo{flex:1; min-width:150px; font-weight:600}
+  .save-act{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .tr-count{font-size:var(--fs-xs); color:var(--muted-2); padding:8px 14px 2px; text-align:right}
   .trades-body{padding:4px 0 6px}
   .trades-empty{padding:18px; text-align:center}
   .tr-tab{width:100%; border-collapse:collapse; font-size:var(--fs-xs)}
@@ -383,6 +394,7 @@
   /* 타입 색 토큰 (급등 빨강/급락 파랑/목표가 액센트) */
   .t-up{--tc:var(--up)} .t-down{--tc:var(--down)}
   .t-target{--tc:var(--accent)}
+  .t-vol{--tc:var(--whale)}      /* 거래량 급증 — 방향이 아니므로 앰버로 분리 */
 
   /* GNB 벨 */
   .bell-btn{position:relative; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
@@ -438,24 +450,12 @@
   .auth-submit.sec:hover{border-color:var(--accent); color:var(--accent)}
   .auth-submit.ghost{background:none; color:var(--muted); border:1px solid var(--line)}
   .auth-submit.ghost:hover{color:var(--text)}
+  a.auth-submit{display:block; text-align:center; text-decoration:none; box-sizing:border-box}
   .acct-who{display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap}
   .acct-who b{font-size:var(--fs-md); font-weight:800; overflow-wrap:anywhere}
   .acct-role{font-size:var(--fs-xs); font-weight:800; color:#fff; background:var(--accent);
     border-radius:4px; padding:2px 6px}
-  .adm-list{max-height:320px; overflow-y:auto; margin-bottom:10px;
-    border:1px solid var(--line-weak); border-radius:6px}
-  .adm-row{display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--line-weak)}
-  .adm-row:last-child{border-bottom:0}
-  .adm-name{flex:1; min-width:0; font-size:var(--fs-xs); font-weight:700; overflow-wrap:anywhere}
-  .adm-name small{display:block; color:var(--muted-2); font-weight:600; margin-top:2px}
-  .adm-act{background:var(--panel); border:1px solid var(--line); color:var(--muted); border-radius:5px;
-    padding:4px 8px; font-size:var(--fs-xs); font-weight:700; cursor:pointer; font-family:var(--sans); flex:none}
-  .adm-act:hover{border-color:var(--accent); color:var(--accent)}
-  .adm-act.danger:hover{border-color:var(--down); color:var(--down)}
-  .adm-temp{background:var(--panel-2); border:1px solid var(--accent); border-radius:6px;
-    padding:10px; margin-bottom:10px; font-size:var(--fs-xs); line-height:1.7}
-  .adm-temp code{display:block; font-family:var(--mono,monospace); font-size:var(--fs-md); font-weight:800;
-    color:var(--text); margin-top:4px; letter-spacing:.04em; overflow-wrap:anywhere}
+  /* 계정 발급·목록·재설정은 전용 화면(admin.html)이 담당한다 — 여기엔 두지 않는다 */
 
   .drawer-overlay{position:fixed; inset:0; background:rgba(15,22,38,.4); opacity:0; visibility:hidden;
     transition:opacity .25s, visibility .25s; z-index:70}
@@ -769,8 +769,17 @@
         </div>
 
         <div class="swap-save" id="swapSaveRow" hidden>
-          <button type="button" class="swap-save-btn" id="swapSave">이 교환 기록하기</button>
-          <span class="swap-save-hint" id="swapSaveHint"></span>
+          <div class="save-fields">
+            <label class="save-lab" for="tradeAt">거래 시각</label>
+            <input class="save-inp" type="datetime-local" id="tradeAt" />
+            <label class="save-lab" for="tradeMemo">메모</label>
+            <input class="save-inp memo" type="text" id="tradeMemo" maxlength="200"
+                   placeholder="예) 교환비 벌어져서 갈아탐 (선택)" />
+          </div>
+          <div class="save-act">
+            <button type="button" class="swap-save-btn" id="swapSave">이 교환 기록하기</button>
+            <span class="swap-save-hint" id="swapSaveHint"></span>
+          </div>
         </div>
       </div>
     </section>
@@ -857,9 +866,8 @@
         <div class="auth-msg" id="authMsg"></div>
         <button class="auth-submit" type="submit" id="authSubmit">로그인</button>
       </form>
-      <div class="auth-switch">
-        <span id="authSwitchTxt">계정이 없으신가요?</span>
-        <button type="button" id="authSwitch">회원가입</button>
+      <div class="auth-switch" id="authNotice">
+        <span>계정은 관리자가 발급합니다. 필요하시면 관리자에게 요청해 주세요.</span>
       </div>
     </div>
 
@@ -868,7 +876,7 @@
       <div class="acct-who"><b id="acctWho">—</b><span class="acct-role" id="acctRole"></span></div>
       <div class="auth-msg" id="acctMsg"></div>
       <button class="auth-submit sec" type="button" id="btnChangePw">비밀번호 변경</button>
-      <button class="auth-submit sec" type="button" id="btnAdmin" hidden>사용자 관리</button>
+      <a class="auth-submit sec" id="btnAdmin" href="admin.html" hidden>계정 관리 ↗</a>
       <button class="auth-submit ghost" type="button" id="btnLogout">로그아웃</button>
     </div>
 
@@ -883,12 +891,6 @@
       <button class="auth-submit ghost" type="button" id="pwBack">뒤로</button>
     </form>
 
-    <!-- 사용자 관리 (관리자) -->
-    <div id="paneAdmin" class="auth-form" hidden>
-      <div class="auth-msg" id="admMsg"></div>
-      <div class="adm-list" id="admList"></div>
-      <button class="auth-submit ghost" type="button" id="admBack">뒤로</button>
-    </div>
   </div>
 </div>
 
@@ -949,7 +951,17 @@
       </div>
       <div class="cfg-group">
         <div class="cfg-item">
-          <div class="cfg-l"><b>관심코인만 감지</b><span>즐겨찾기·상세코인 범위로 제한</span></div>
+          <div class="cfg-l"><b>거래량 급증 감지</b><span>24시간 평균 대비 체결대금 급증</span></div>
+          <label class="sw"><input type="checkbox" id="cfgVol"><span></span></label>
+        </div>
+        <div class="cfg-slider">
+          <div class="cs-lbl">급증 배수 <b id="cfgVolMultV">5배</b></div>
+          <input type="range" id="cfgVolMult" min="2" max="20" step="1" value="5">
+        </div>
+      </div>
+      <div class="cfg-group">
+        <div class="cfg-item">
+          <div class="cfg-l"><b>관심코인만 감지</b><span>즐겨찾기 · 상세 · A/B 비교 코인으로 제한</span></div>
           <label class="sw"><input type="checkbox" id="cfgFavOnly"><span></span></label>
         </div>
         <div class="cfg-item">
@@ -1119,8 +1131,18 @@ function connect(){
   };
   ws.onerror = () => { try{ ws.close(); }catch(_){} };
 }
+/* 구독 코드 = 지금 보고 있는 마켓 + 가격 알림이 걸린 코인.
+   알림은 마켓 탭과 무관하게 감시돼야 하는데, 현재 탭 코드만 구독하면
+   BTC/USDT 마켓에 걸어 둔 알림이 그 탭을 보고 있을 때만 울린다. */
+function subscriptionCodes(){
+  const set = new Set(state.byQuote[state.quote]);
+  for(const a of state.alerts){
+    if(!a.disabled && state.meta[a.market]) set.add(a.market);
+  }
+  return [...set];
+}
 function subscribe(){
-  const codes = state.byQuote[state.quote];
+  const codes = subscriptionCodes();
   if(!ws || ws.readyState !== 1 || !codes.length) return;
   ws.send(JSON.stringify([
     {ticket:'coin-ticker'},
@@ -1134,7 +1156,7 @@ function ingest(t){
     t._dir = t.trade_price > prev.trade_price ? 1 : t.trade_price < prev.trade_price ? -1 : (prev._dir||0);
   } else { t._dir = 0; }
   state.data[t.code] = t;
-  detectSurge(t);        // 급등락 감지 (롤링 버퍼)
+  detectAnomalies(t);    // 급등락 + 거래량 급증 (롤링 버퍼)
   checkPriceAlerts(t);   // 가격 목표 알림
   dirty.add(t.code);
   scheduleRender();
@@ -1476,6 +1498,9 @@ function fillCompareSelects(){
   state.swapQty = ''; state.swapDir = 'ab'; state.swapPct = 100; state.roundRatio = '';
   const sq = document.getElementById('swapQty'); if(sq) sq.value = '';
   const rr = document.getElementById('roundRatio'); if(rr) rr.value = '';
+  // A/B가 풀렸으므로 '기간별 추이'도 함께 접는다.
+  // 이걸 빼면 마켓 탭을 바꿔도 이전 코인 쌍의 수치가 표에 그대로 남는다.
+  loadPairHistory();
 }
 // A/B 비교는 상단 드롭다운으로만 선택 (행 클릭은 상세 전용 — 역할 분리)
 function sideView(sel, mk){
@@ -1565,11 +1590,11 @@ function renderAcct(){
 }
 // 모달 안에서 화면만 갈아 끼운다 (로그인 · 계정 · 비밀번호 변경 · 사용자 관리)
 function showPane(name){
-  const panes = { auth:'로그인', acct:'계정', pw:'비밀번호 변경', admin:'사용자 관리' };
-  ['paneAuth','paneAcct','paneChangePw','paneAdmin'].forEach(id=>{ document.getElementById(id).hidden = true; });
-  document.getElementById({ auth:'paneAuth', acct:'paneAcct', pw:'paneChangePw', admin:'paneAdmin' }[name]).hidden = false;
+  const panes = { auth:'로그인', acct:'계정', pw:'비밀번호 변경' };
+  ['paneAuth','paneAcct','paneChangePw'].forEach(id=>{ document.getElementById(id).hidden = true; });
+  document.getElementById({ auth:'paneAuth', acct:'paneAcct', pw:'paneChangePw' }[name]).hidden = false;
   if(name !== 'auth') document.getElementById('authTitle').textContent = panes[name];
-  ['authMsg','acctMsg','pwMsg','admMsg'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=''; });
+  ['authMsg','acctMsg','pwMsg'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent=''; });
 }
 function openAccount(){
   document.getElementById('authModal').hidden = false;
@@ -1584,22 +1609,30 @@ function openAccount(){
     document.getElementById('pwMsg').textContent = '임시 비밀번호로 로그인했습니다. 새 비밀번호를 정해 주세요.';
   }
 }
+/* 화면은 둘뿐이다 — 평소엔 '로그인', 계정이 하나도 없는 최초 1회만 '관리자 계정 만들기'.
+   공개 회원가입은 없다. 그 뒤의 계정은 전부 관리자가 발급한다. */
 function setAuthMode(mode){
   authMode = mode;
   showPane('auth');
   const login = mode === 'login';
-  document.getElementById('authTitle').textContent   = login ? '로그인' : '회원가입';
-  document.getElementById('authSubmit').textContent  = login ? '로그인' : '가입하고 시작하기';
-  document.getElementById('authSwitchTxt').textContent = login ? '계정이 없으신가요?' : '이미 계정이 있으신가요?';
-  document.getElementById('authSwitch').textContent  = login ? '회원가입' : '로그인';
+  document.getElementById('authTitle').textContent   = login ? '로그인' : '관리자 계정 만들기';
+  document.getElementById('authSubmit').textContent  = login ? '로그인' : '관리자 계정 만들기';
   document.getElementById('authPw').autocomplete     = login ? 'current-password' : 'new-password';
   document.getElementById('authPw').placeholder      = login ? '' : '8자 이상';
+  document.getElementById('authNotice').firstElementChild.textContent = login
+    ? '계정은 관리자가 발급합니다. 필요하시면 관리자에게 요청해 주세요.'
+    : '아직 계정이 없습니다. 지금 만드는 첫 계정이 관리자가 되며, 이후 가입은 닫힙니다.';
   document.getElementById('authMsg').textContent     = '';
 }
-function openAuth(){
+async function openAuth(){
   document.getElementById('authModal').hidden = false;
   setAuthMode('login');
   document.getElementById('authUser').focus();
+  // 계정이 0개면 최초 관리자를 만들 수 있게 화면을 바꾼다 (서버가 판단 주체)
+  try{
+    const r = await api('/api/auth/bootstrap');
+    if(r && r.needed && !auth.token) setAuthMode('bootstrap');
+  }catch(_){ /* 서버가 없으면 로그인 화면 그대로 */ }
 }
 function closeAuth(){ document.getElementById('authModal').hidden = true; }
 
@@ -1660,54 +1693,26 @@ async function submitChangePw(e){
   }finally{ btn.disabled = false; }
 }
 
-/* ---------- 사용자 관리 (관리자) ----------
-   이메일 발송 수단이 없으므로 분실 시 관리자가 임시 비밀번호를 발급하고
-   직접 전달한다. 임시 비밀번호는 서버에 남지 않고 이 화면에서 한 번만 보인다. */
-function renderAdminList(users){
-  document.getElementById('admList').innerHTML = users.map(u => {
-    const d = new Date(u.created_at), p2 = n => String(n).padStart(2,'0');
-    const isMe = u.username === auth.username;   // 본인은 재설정·삭제 대상이 아니다
-    return `<div class="adm-row">
-      <span class="adm-name">${escHtml(u.username)}${u.is_admin ? ' <span class="acct-role">관리자</span>' : ''}
-        <small>가입 ${d.getFullYear()}.${p2(d.getMonth()+1)}.${p2(d.getDate())} · 기록 ${u.trade_count}건`
-        + `${u.must_change_pw ? ' · 임시 비밀번호 상태' : ''}</small></span>
-      ${isMe ? '' : `<button class="adm-act" data-reset="${u.id}">재설정</button>
-                     <button class="adm-act danger" data-del="${u.id}" data-name="${escHtml(u.username)}">삭제</button>`}
-    </div>`;
-  }).join('');
-}
-async function loadAdminUsers(){
-  try{
-    renderAdminList((await api('/api/admin/users')).users || []);
-  }catch(e){
-    document.getElementById('admList').innerHTML =
-      `<div class="adm-row"><span class="adm-name">${escHtml(e.message)}</span></div>`;
-  }
-}
-async function openAdmin(){
-  showPane('admin');
-  document.getElementById('admList').innerHTML = '<div class="adm-row"><span class="adm-name">불러오는 중…</span></div>';
-  await loadAdminUsers();
-}
-async function adminReset(id){
-  const msg = document.getElementById('admMsg');
-  msg.className = 'auth-msg';
-  try{
-    const r = await api('/api/admin/reset-password', { method:'POST', body:{ user_id:+id } });
-    // 임시 비밀번호는 서버에 남지 않는다 — 이 화면이 유일한 전달 기회다
-    msg.className = 'auth-msg ok';
-    msg.innerHTML = `<div class="adm-temp"><b>${escHtml(r.username)}</b> 님의 임시 비밀번호입니다. `
-                  + `지금 복사해 전달하세요 — 다시 볼 수 없습니다.<code>${escHtml(r.password)}</code></div>`;
-    await loadAdminUsers();                    // 안내는 남기고 목록만 갱신
-  }catch(e){ msg.className = 'auth-msg'; msg.textContent = e.message; }
-}
-
 /* ---------- 트레이드 기록 ---------- */
+// datetime-local 은 로컬 시간대 문자열을 쓴다 (toISOString은 UTC라 시간이 밀린다)
+function localDT(ts){
+  const d = new Date(ts), p2 = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+function resetTradeFields(){
+  const at = document.getElementById('tradeAt'), memo = document.getElementById('tradeMemo');
+  if(at) at.value = localDT(Date.now());
+  if(memo) memo.value = '';
+}
 function updateSaveRow(){
   const row = document.getElementById('swapSaveRow');
   if(!row) return;
+  const wasHidden = row.hidden;
   row.hidden = !roundCtx || !API_READY;       // 교환 시뮬레이션이 성립할 때만 노출
   if(row.hidden) return;
+  // 처음 열릴 때만 '지금'으로 채운다 — 사용자가 고쳐 둔 시각을 매 틱 덮어쓰면 안 된다
+  const at = document.getElementById('tradeAt');
+  if(at && (wasHidden || !at.value)) at.value = localDT(Date.now());
   document.getElementById('swapSave').disabled = !auth.token;
   document.getElementById('swapSaveHint').textContent = auth.token ? '' : '로그인하면 계정에 저장됩니다';
 }
@@ -1716,12 +1721,13 @@ async function loadTrades(){
   if(!body || !API_READY) return;
   if(!auth.token){ body.innerHTML = '<div class="cmp-empty trades-empty">로그인 후 이용할 수 있습니다</div>'; return; }
   try{
-    renderTrades((await api('/api/trades')).trades || []);
+    const r = await api('/api/trades');
+    renderTrades(r.trades || [], r.total);
   }catch(e){
     body.innerHTML = `<div class="cmp-empty trades-empty">${escHtml(e.message)}</div>`;
   }
 }
-function renderTrades(list){
+function renderTrades(list, total){
   const body = document.getElementById('tradesBody');
   if(!list.length){
     body.innerHTML = '<div class="cmp-empty trades-empty">아직 기록이 없습니다 · 교환 시뮬레이션에서 “이 교환 기록하기”를 눌러 보세요</div>';
@@ -1739,14 +1745,25 @@ function renderTrades(list){
       <td style="text-align:right"><button class="tr-del" data-id="${t.id}">삭제</button></td>
     </tr>`;
   }).join('');
+  // 서버는 최근 500건만 내려준다 — 누적분이 그보다 많으면 잘렸다는 사실을 숨기지 않는다
+  const n = Number(total);
+  const count = isFinite(n) && n > 0
+    ? (n > list.length ? `전체 ${n.toLocaleString('ko-KR')}건 중 최근 ${list.length}건 표시`
+                       : `전체 ${n.toLocaleString('ko-KR')}건`)
+    : `${list.length}건`;
   body.innerHTML = `<div class="tr-wrap"><table class="tr-tab">
     <thead><tr><th>일시</th><th>교환</th><th>교환비</th><th>메모</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
+    <tbody>${rows}</tbody></table></div><div class="tr-count">${count}</div>`;
 }
 async function saveTrade(){
   if(!auth.token || !roundCtx) return;
   const { mFrom, mTo, use, out, r1 } = roundCtx;
   const btn = document.getElementById('swapSave');
+  // 사용자가 지정한 거래 시각 — 값이 없거나 못 읽으면 지금으로 떨어뜨린다
+  const atVal = (document.getElementById('tradeAt') || {}).value;
+  const parsed = atVal ? new Date(atVal).getTime() : NaN;
+  const tradedAt = isFinite(parsed) ? parsed : Date.now();
+  const memo = ((document.getElementById('tradeMemo') || {}).value || '').trim().slice(0, 200);
   btn.disabled = true;
   try{
     await api('/api/trades', { method:'POST', body:{
@@ -1756,8 +1773,11 @@ async function saveTrade(){
       to_price:   (state.data[mTo.market]  ||{}).trade_price || 0,
       quote: state.quote,
       fee_applied: document.getElementById('swapFee').checked,
+      traded_at: tradedAt,
+      memo: memo || null,
     }});
     toastSimple('교환 기록을 저장했습니다');
+    resetTradeFields();
     loadTrades();
   }catch(e){
     toastSimple(e.message);
@@ -2050,28 +2070,12 @@ function bindUI(){
   // 계정
   document.getElementById('acctBtn').addEventListener('click', ()=> auth.username ? openAccount() : openAuth());
   document.getElementById('btnChangePw').addEventListener('click', ()=> showPane('pw'));
-  document.getElementById('btnAdmin').addEventListener('click', openAdmin);
   document.getElementById('btnLogout').addEventListener('click', ()=>{ closeAuth(); logout(); });
   document.getElementById('paneChangePw').addEventListener('submit', submitChangePw);
   document.getElementById('pwBack').addEventListener('click', ()=> showPane('acct'));
-  document.getElementById('admBack').addEventListener('click', ()=> showPane('acct'));
-  document.getElementById('admList').addEventListener('click', async e=>{
-    const rst = e.target.closest('button[data-reset]');
-    if(rst){
-      if(confirm('임시 비밀번호를 발급할까요? 해당 계정은 즉시 로그아웃되고 기존 비밀번호는 쓸 수 없게 됩니다.')) adminReset(rst.dataset.reset);
-      return;
-    }
-    const del = e.target.closest('button[data-del]');
-    if(del){
-      if(!confirm(`${del.dataset.name} 계정을 삭제할까요? 이 계정의 트레이드 기록도 함께 지워집니다.`)) return;
-      try{ await api('/api/admin/users/' + del.dataset.del, { method:'DELETE' }); await loadAdminUsers(); toastSimple('계정을 삭제했습니다'); }
-      catch(err){ document.getElementById('admMsg').textContent = err.message; }
-    }
-  });
   document.getElementById('authClose').addEventListener('click', closeAuth);
   document.getElementById('authModal').addEventListener('click', e=>{ if(e.target.id === 'authModal') closeAuth(); });
   document.getElementById('authForm').addEventListener('submit', submitAuth);
-  document.getElementById('authSwitch').addEventListener('click', ()=> setAuthMode(authMode === 'login' ? 'register' : 'login'));
   document.addEventListener('keydown', e=>{
     if(e.key === 'Escape' && !document.getElementById('authModal').hidden) closeAuth();
   });
@@ -2119,6 +2123,8 @@ function bindUI(){
   // 감지 설정
   document.getElementById('cfgSurge').addEventListener('change', e=>{ state.notifCfg.surge=e.target.checked; saveCfg(); });
   document.getElementById('cfgSurgePct').addEventListener('input', e=>{ state.notifCfg.surgePct=parseFloat(e.target.value); document.getElementById('cfgSurgePctV').textContent=e.target.value+'%'; saveCfg(); });
+  document.getElementById('cfgVol').addEventListener('change', e=>{ state.notifCfg.vol=e.target.checked; saveCfg(); });
+  document.getElementById('cfgVolMult').addEventListener('input', e=>{ state.notifCfg.volMult=parseFloat(e.target.value); document.getElementById('cfgVolMultV').textContent=e.target.value+'배'; saveCfg(); });
   document.getElementById('cfgFavOnly').addEventListener('change', e=>{ state.notifCfg.favOnly=e.target.checked; saveCfg(); });
   document.getElementById('cfgDesktop').addEventListener('change', e=>{ if(e.target.checked){ requestDesktop(); } else { state.notifCfg.desktop=false; saveCfg(); } });
   document.getElementById('cfgDesktopBtn').addEventListener('click', requestDesktop);
@@ -2152,14 +2158,15 @@ const ICON = {
 };
 // 알림 타입 → 아이콘/색클래스/라벨 (급등 빨강/급락 파랑/목표가 액센트)
 const TYPE_META = {
-  surge_up:   {icon:ICON.trendUp,   cls:'t-up',    lab:'급등'},
-  surge_down: {icon:ICON.trendDown, cls:'t-down',  lab:'급락'},
-  target:     {icon:ICON.bell,      cls:'t-target',lab:'목표가'},
+  surge_up:     {icon:ICON.trendUp,   cls:'t-up',    lab:'급등'},
+  surge_down:   {icon:ICON.trendDown, cls:'t-down',  lab:'급락'},
+  volume_spike: {icon:ICON.activity,  cls:'t-vol',   lab:'거래량 급증'},
+  target:       {icon:ICON.bell,      cls:'t-target',lab:'목표가'},
 };
 
 /* ---- 설정/알림 저장·로드 ---- */
 function loadCfg(){
-  const d = {surge:true, surgePct:2, favOnly:false, desktop:false};
+  const d = {surge:true, surgePct:2, vol:true, volMult:5, favOnly:false, desktop:false};
   try{
     const s = JSON.parse(localStorage.getItem('coin_notif_cfg')||'{}');
     delete s.sound; delete s.whale; delete s.whaleAmt;   // 구버전 저장분의 제거된 키 정리
@@ -2178,33 +2185,78 @@ function saveAlerts(){
 const SURGE_WINDOW=90000, SURGE_MIN_AGE=20000, SURGE_WARMUP=20000, SURGE_COOLDOWN=180000;
 const SAMPLE_GAP=2000;
 
-/* ---- 신호1: 급등/급락 (ticker 스트림, 전체 코인) ---- */
-function detectSurge(t){
+/* 감시 범위 — '관심코인만'을 켜면 내가 실제로 보고 있는 코인만 남긴다.
+   즐겨찾기 + 상세 패널 코인 + A/B 비교로 고른 두 코인이 그 대상이다. */
+function inWatchScope(mk){
+  if(!state.notifCfg.favOnly) return true;
+  return state.favorites.has(mk) || state.detail===mk || state.selA===mk || state.selB===mk;
+}
+const koOf = mk => (state.meta[mk] && state.meta[mk].ko) || mk;
+const ageLabel = ms => { const s = Math.round(ms/1000); return s>=60 ? Math.round(s/60)+'분' : s+'초'; };
+
+/* ---- 롤링 버퍼 + 신호 디스패치 (ticker 스트림) ---- */
+function detectAnomalies(t){
   const mk=t.code, price=t.trade_price, now=Date.now();
   if(!price) return;
-  // 롤링 버퍼 — 2초 간격 샘플로 코인당 소버퍼 유지(O(1) push/shift)
+  // 알림 때문에 추가 구독된 타 마켓 코인은 감지 대상이 아니다.
+  // (rowMap = 지금 화면에 떠 있는 마켓의 코인들 — 여기 없으면 목록에도 없는 코인)
+  if(!rowMap[mk]) return;
+  // 롤링 버퍼 — 2초 간격 샘플로 코인당 소버퍼 유지(O(1) push/shift).
+  // 가격과 함께 누적 거래대금도 담아 둔다 — 구간 거래량은 그 차분으로만 구할 수 있다.
   let buf = state.priceBuf[mk]; if(!buf) buf = state.priceBuf[mk] = [];
   const last = buf[buf.length-1];
   if(!last || now-last.t >= SAMPLE_GAP){
-    buf.push({t:now, price});
+    buf.push({t:now, price, acc: t.acc_trade_price_24h || 0});
     const cutoff = now - SURGE_WINDOW;
     while(buf.length && buf[0].t < cutoff) buf.shift();
   }
-  if(!state.notifCfg.surge) return;
   if(now - state.startTs < SURGE_WARMUP) return;                 // 로드 직후 워밍업(스팸 방지)
-  if(state.notifCfg.favOnly && !state.favorites.has(mk) && state.detail!==mk) return;
+  if(!inWatchScope(mk)) return;
   const base = buf[0];
   if(!base || now-base.t < SURGE_MIN_AGE) return;                // 기준표본 ≥20초 전
-  const pct = (price-base.price)/base.price*100;
+  detectSurge(t, base, now);
+  detectVolumeSpike(t, base, now);
+}
+
+/* ---- 신호1: 급등/급락 ---- */
+function detectSurge(t, base, now){
+  if(!state.notifCfg.surge) return;
+  const mk = t.code;
+  const pct = (t.trade_price-base.price)/base.price*100;
   if(!isFinite(pct) || Math.abs(pct) < state.notifCfg.surgePct) return;
   const ck = 'surge:'+mk;
   if(now - (state.cooldown[ck]||0) < SURGE_COOLDOWN) return;     // 코인별 3분 쿨다운
   state.cooldown[ck] = now;
-  const ageSec = Math.round((now-base.t)/1000);
-  const ageLbl = ageSec>=60 ? Math.round(ageSec/60)+'분' : ageSec+'초';
   const dir = pct>0?1:-1;
-  emitAlert({type:dir>0?'surge_up':'surge_down', market:mk, ko:(state.meta[mk]&&state.meta[mk].ko)||mk, dir,
-    msg:`${dir>0?'급등':'급락'} ${pct>0?'+':''}${pct.toFixed(2)}% (${ageLbl})`});
+  emitAlert({type:dir>0?'surge_up':'surge_down', market:mk, ko:koOf(mk), dir,
+    msg:`${dir>0?'급등':'급락'} ${pct>0?'+':''}${pct.toFixed(2)}% (${ageLabel(now-base.t)})`});
+}
+
+/* ---- 신호2: 거래량(체결대금) 급증 ----
+   "많이 거래됐다"는 절대 금액으로는 판단할 수 없다 — 코인마다 규모가 1000배씩 차이 난다.
+   그래서 구간 실제 체결대금(Δ누적)을 그 코인의 24시간 평균 페이스와 비교해 배수로 본다.
+     기대치 = 24H 거래대금 × (구간 / 24H),  배수 = 실제 ÷ 기대치
+   가격이 안 움직여도 물량이 몰리면 잡히므로 급등락 신호와 겹치지 않는다. */
+const DAY_MS = 86400000;
+function detectVolumeSpike(t, base, now){
+  if(!state.notifCfg.vol) return;
+  const mk = t.code;
+  const acc = t.acc_trade_price_24h || 0;
+  const dt = now - base.t;
+  // 기준 표본에 누적값이 없으면(구버전 버퍼·첫 틱) 차분이 곧 총액이 돼 오탐이 된다
+  if(!(acc > 0) || !(base.acc > 0) || dt <= 0) return;
+  const dV = acc - base.acc;
+  if(!(dV > 0)) return;
+  const expected = acc * (dt / DAY_MS);
+  if(!(expected > 0)) return;
+  const mult = dV / expected;
+  if(!isFinite(mult) || mult < state.notifCfg.volMult) return;
+  const ck = 'vol:'+mk;
+  if(now - (state.cooldown[ck]||0) < SURGE_COOLDOWN) return;
+  state.cooldown[ck] = now;
+  const q = (state.meta[mk] && state.meta[mk].quote) || 'KRW';
+  emitAlert({type:'volume_spike', market:mk, ko:koOf(mk), mult,
+    msg:`거래량 급증 · ${ageLabel(dt)}간 ${fmtVolume(dV, q)} (평소의 ${mult.toFixed(1)}배)`});
 }
 
 /* ---- 가격 목표 알림 (ticker 틱마다, O(alerts)) ---- */
@@ -2226,7 +2278,8 @@ function checkPriceAlerts(t){
     emitAlert({type:'target', market:a.market, ko:(state.meta[a.market]&&state.meta[a.market].ko)||a.market,
       msg:`목표가 ${a.op==='gte'?'도달 ≥':'하회 ≤'} ${fmtPrice(a.price,q)} ${unit(q)} · 현재 ${fmtPrice(price,q)}`});
   }
-  if(changed){ saveAlerts(); renderAlertList(); }
+  // 1회성 알림이 발동해 비활성화됐으면 그 코인은 더 볼 이유가 없다 — 구독에서도 뺀다
+  if(changed){ saveAlerts(); subscribe(); renderAlertList(); }
 }
 
 /* ---- 알림 발생 파이프라인 (로그 + 피드 + 토스트 + 데스크톱) ---- */
@@ -2334,13 +2387,20 @@ function renderNotifLog(){
     return `<div class="log-row ${m.cls}"><span class="log-ic">${m.icon}</span><div class="log-tx"><div class="log-t1">${m.lab} · ${ev.ko}</div><div class="log-t2">${ev.msg}</div></div><span class="log-time">${hhmmss(ev.ts)}</span></div>`;
   }).join('');
 }
+// 알림은 마켓 탭과 무관하게 걸 수 있으므로 전 마켓을 호가통화별로 묶어 보여 준다
 function fillAlertMarketSelect(){
   const sel=document.getElementById('alMarket'); if(!sel) return;
   const prev=sel.value;
-  sel.innerHTML = state.byQuote[state.quote].slice()
-    .sort((a,b)=> state.meta[a].ko.localeCompare(state.meta[b].ko,'ko'))
-    .map(mk=>`<option value="${mk}">${state.meta[mk].ko} (${state.meta[mk].base})</option>`).join('');
-  if(prev && state.meta[prev]) sel.value=prev;
+  const label={KRW:'원화', BTC:'BTC', USDT:'USDT'};
+  sel.innerHTML = ['KRW','BTC','USDT'].map(q=>{
+    const opts = state.byQuote[q].slice()
+      .sort((a,b)=> state.meta[a].ko.localeCompare(state.meta[b].ko,'ko'))
+      .map(mk=>`<option value="${mk}">${state.meta[mk].ko} (${state.meta[mk].base})</option>`).join('');
+    return opts ? `<optgroup label="${label[q]} 마켓">${opts}</optgroup>` : '';
+  }).join('');
+  sel.value = (prev && state.meta[prev]) ? prev
+            : (state.detail && state.meta[state.detail]) ? state.detail
+            : (state.byQuote[state.quote][0] || '');
 }
 function addAlert(){
   const mk=document.getElementById('alMarket').value;
@@ -2350,9 +2410,12 @@ function addAlert(){
   if(!mk || !isFinite(price) || price<=0){ toastSimple('코인과 목표가를 입력하세요'); return; }
   state.alerts.push({id:'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), market:mk, op, price, repeat, fired:false, disabled:false});
   saveAlerts();
+  subscribe();                       // 타 마켓 코인이면 구독 목록에 새로 넣어야 감시된다
   document.getElementById('alPrice').value='';
   renderAlertList();
-  toastSimple('가격 알림을 추가했습니다');
+  const other = state.meta[mk] && state.meta[mk].quote !== state.quote;
+  toastSimple(other ? `가격 알림을 추가했습니다 · ${state.meta[mk].quote} 마켓도 함께 감시합니다`
+                    : '가격 알림을 추가했습니다');
 }
 function renderAlertList(){
   const el=document.getElementById('alertList'); if(!el) return;
@@ -2362,8 +2425,9 @@ function renderAlertList(){
     const ko=(state.meta[a.market]&&state.meta[a.market].ko)||a.market;
     const opl=a.op==='gte'?'≥':'≤';
     const st=a.disabled?'발동됨':(a.repeat?'반복':'대기');
+    const base=(state.meta[a.market]&&state.meta[a.market].base)||a.market.split('-')[1];
     return `<div class="al-row ${a.disabled?'done':''}" data-id="${a.id}">
-      <div class="al-main"><b>${ko}</b> <span class="al-cond num">${opl} ${fmtPrice(a.price,q)} ${unit(q)}</span></div>
+      <div class="al-main"><b>${ko}</b> <span class="al-cond num">${base}/${q} ${opl} ${fmtPrice(a.price,q)} ${unit(q)}</span></div>
       <div class="al-meta"><span class="al-st">${st}</span>
         <button class="al-tg" data-act="toggle" aria-label="켜기/끄기">${a.disabled?ICON.play:ICON.pause}</button>
         <button class="al-del" data-act="del" aria-label="삭제">${ICON.close}</button></div>
@@ -2376,7 +2440,7 @@ function alertListClick(e){
   const id=row.dataset.id, a=state.alerts.find(x=>x.id===id); if(!a) return;
   if(btn.dataset.act==='del'){ state.alerts=state.alerts.filter(x=>x.id!==id); }
   else if(btn.dataset.act==='toggle'){ a.disabled=!a.disabled; if(!a.disabled) a.fired=false; }
-  saveAlerts(); renderAlertList();
+  saveAlerts(); subscribe(); renderAlertList();   // 구독 목록에서 빼거나 다시 넣는다
 }
 function renderSettings(){
   const c=state.notifCfg; if(!c) return;
@@ -2384,6 +2448,9 @@ function renderSettings(){
   set('cfgSurge','checked',c.surge);
   set('cfgSurgePct','value',c.surgePct);
   const sp=document.getElementById('cfgSurgePctV'); if(sp) sp.textContent=c.surgePct+'%';
+  set('cfgVol','checked',c.vol);
+  set('cfgVolMult','value',c.volMult);
+  const vm=document.getElementById('cfgVolMultV'); if(vm) vm.textContent=c.volMult+'배';
   set('cfgDesktop','checked',c.desktop);
   set('cfgFavOnly','checked',c.favOnly);
 }
