@@ -1337,7 +1337,9 @@ function updateRow(mk, flash=true){
 let lastOrderKey = '';
 function reorder(){
   const list = document.getElementById('coinList');
-  const order = visibleSorted();
+  // 마켓 목록은 채워졌는데 행은 아직 안 만들어진 순간이 있다(부팅 중 await).
+  // 그때 rowMap 에 없는 코드를 만지면 터지므로 행이 있는 것만 다룬다.
+  const order = visibleSorted().filter(mk => rowMap[mk]);
   // 보이는 행만 노출
   const visSet = new Set(order);
   for(const mk in rowMap){
@@ -1363,7 +1365,12 @@ function scheduleRender(){
     stamp();
   });
 }
-setInterval(reorder, 1200);   // 실시간 재정렬은 1.2초 주기(깜빡임 방지)
+// 재정렬 타이머는 행이 생긴 뒤에만 돈다 — 로그인 게이트에서 헛돌 이유도 없다
+let reorderTimer = null;
+function startReorderLoop(){
+  if(reorderTimer) return;
+  reorderTimer = setInterval(reorder, 1200);   // 실시간 재정렬은 1.2초 주기(깜빡임 방지)
+}
 
 /* ---------- 즐겨찾기 (계약 유지) ---------- */
 function toggleFav(mk){
@@ -2683,8 +2690,13 @@ async function boot(){
   booted = true;
   unlock();
   state.startTs = Date.now();          // 워밍업은 시세가 흐르기 시작한 시점부터
+  // 설정은 마켓 목록과 나란히 받는다 — 줄세우면 그만큼 첫 화면이 늦어진다
+  const prefsP = (API_READY && auth.token)
+    ? api('/api/prefs').then(r => r.prefs).catch(() => null)
+    : Promise.resolve(null);
+  let prefs = null;
   try{
-    await loadMarkets();
+    [ , prefs] = await Promise.all([loadMarkets(), prefsP]);
   }catch(e){
     document.getElementById('emptyMsg').style.display='block';
     document.getElementById('emptyMsg').textContent='시세를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.';
@@ -2692,14 +2704,11 @@ async function boot(){
     return;
   }
   // 계정에 저장해 둔 설정을 목록 구성 전에 반영한다 (마켓 탭·즐겨찾기·테마)
-  let prefs = null;
-  if(API_READY && auth.token){
-    try{ prefs = (await api('/api/prefs')).prefs; }catch(_){}
-  }
   applyPrefsEarly(prefs);
   refreshTabs();
   fillCompareSelects();
   buildRows();
+  startReorderLoop();                  // 행이 생긴 뒤부터 재정렬
   // 실시간 스트림을 가장 먼저 확보한다.
   // 업비트의 Origin 할당량은 초당 단위가 매우 작아, REST를 먼저 몰아 쏘면
   // 정작 시세의 본류인 WS 핸드셰이크가 429로 밀려 "재연결 중…"에 갇힌다.
