@@ -22,7 +22,7 @@ function corsHeaders(env, origin) {
   const ok = origin && allowed.includes(origin);
   return {
     'Access-Control-Allow-Origin': ok ? origin : (allowed[0] || '*'),
-    'Access-Control-Allow-Methods': 'GET,POST,DELETE,PATCH,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -213,9 +213,10 @@ async function deleteUser(env, origin, me, id) {
   const t = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(id).first();
   if (!t) return json({ error: '없는 계정입니다.' }, 404, env, origin);
   await env.DB.batch([
-    env.DB.prepare('DELETE FROM trades   WHERE user_id = ?').bind(id),
-    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
-    env.DB.prepare('DELETE FROM users    WHERE id = ?').bind(id),
+    env.DB.prepare('DELETE FROM trades     WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM sessions   WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM user_prefs WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM users      WHERE id = ?').bind(id),
   ]);
   return json({ ok: true }, 200, env, origin);
 }
@@ -234,6 +235,35 @@ async function handleLogin(request, env, origin) {
 
   return json({ token: await issueSession(env, user.id), username: user.username,
                 isAdmin: !!user.is_admin, mustChangePw: !!user.must_change_pw }, 200, env, origin);
+}
+
+/* ---------- 사용자 설정 ----------
+   내용은 서버가 해석하지 않는다. 프론트가 무엇을 저장하든 그대로 보관하고
+   돌려주되, 한 계정이 DB를 잠식하지 못하게 크기만 막는다. */
+const PREFS_MAX = 64 * 1024;
+
+async function getPrefs(env, origin, me) {
+  const row = await env.DB.prepare('SELECT data, updated_at FROM user_prefs WHERE user_id = ?')
+    .bind(me.userId).first();
+  if (!row) return json({ prefs: null }, 200, env, origin);
+  let prefs = null;
+  try { prefs = JSON.parse(row.data); } catch (_) { /* 깨진 값이면 없는 셈 친다 */ }
+  return json({ prefs, updated_at: row.updated_at }, 200, env, origin);
+}
+
+async function putPrefs(request, env, origin, me) {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.prefs !== 'object' || body.prefs === null)
+    return json({ error: '설정 형식이 올바르지 않습니다.' }, 400, env, origin);
+
+  const data = JSON.stringify(body.prefs);
+  if (data.length > PREFS_MAX) return json({ error: '설정이 너무 큽니다.' }, 413, env, origin);
+
+  await env.DB.prepare(
+    `INSERT INTO user_prefs (user_id, data, updated_at) VALUES (?,?,?)
+     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`)
+    .bind(me.userId, data, Date.now()).run();
+  return json({ ok: true }, 200, env, origin);
 }
 
 /* ---------- 트레이드 히스토리 ---------- */
@@ -322,6 +352,11 @@ export default {
         if (p === '/api/admin/reset-password' && request.method === 'POST') return await resetPassword(request, env, origin, me);
         const du = p.match(/^\/api\/admin\/users\/(\d+)$/);
         if (du && request.method === 'DELETE') return await deleteUser(env, origin, me, +du[1]);
+      }
+      if (p === '/api/prefs') {
+        if (!me) return json({ error: '로그인이 필요합니다.' }, 401, env, origin);
+        if (request.method === 'GET') return await getPrefs(env, origin, me);
+        if (request.method === 'PUT') return await putPrefs(request, env, origin, me);
       }
       if (p.startsWith('/api/trades')) {
         if (!me) return json({ error: '로그인이 필요합니다.' }, 401, env, origin);

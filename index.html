@@ -451,6 +451,14 @@
   .auth-submit.ghost{background:none; color:var(--muted); border:1px solid var(--line)}
   .auth-submit.ghost:hover{color:var(--text)}
   a.auth-submit{display:block; text-align:center; text-decoration:none; box-sizing:border-box}
+  /* 로그인 게이트 — 인증 전에는 시세를 아예 그리지 않는다.
+     화면을 가리는 게 아니라 데이터 자체를 안 부른다(업비트 할당량도 아낀다). */
+  body.locked .container,
+  body.locked .status,
+  body.locked #bellBtn{display:none}
+  body.locked .modal{background:var(--bg)}
+  .gate-brand{text-align:center; padding:0 16px 18px; color:var(--muted); font-size:var(--fs-xs); line-height:1.7}
+  .gate-brand b{display:block; color:var(--text); font-size:var(--fs-md); font-weight:800; margin-bottom:4px}
   .acct-who{display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap}
   .acct-who b{font-size:var(--fs-md); font-weight:800; overflow-wrap:anywhere}
   .acct-role{font-size:var(--fs-xs); font-weight:800; color:#fff; background:var(--accent);
@@ -855,6 +863,10 @@
     <div class="modal-head">
       <b id="authTitle">로그인</b>
       <button class="drawer-close" id="authClose" aria-label="닫기">✕</button>
+    </div>
+    <div class="gate-brand" id="gateBrand" hidden>
+      <b>코인 시세 · 실시간 터미널</b>
+      시세와 교환 시뮬레이션은 로그인 후 이용할 수 있습니다
     </div>
     <!-- 로그인 / 회원가입 -->
     <div id="paneAuth">
@@ -1313,6 +1325,7 @@ function toggleFav(mk){
   localStorage.setItem('coin_favs', JSON.stringify([...state.favorites]));
   updateRow(mk, false);
   reorder();
+  savePrefs();
 }
 
 /* ---------- 코인 상세 패널 (UI 신설 — 계약 필드만 소비) ---------- */
@@ -1334,6 +1347,7 @@ function selectDetail(mk){
   refreshDetailHighlight();
   updateDetail();
   loadChart();          // 코인 변경 시에만 fetch
+  savePrefs();
 }
 function refreshDetailHighlight(){
   for(const mk in rowMap){
@@ -1634,7 +1648,92 @@ async function openAuth(){
     if(r && r.needed && !auth.token) setAuthMode('bootstrap');
   }catch(_){ /* 서버가 없으면 로그인 화면 그대로 */ }
 }
-function closeAuth(){ document.getElementById('authModal').hidden = true; }
+// 로그인 전에는 모달을 닫을 수 없다 — 게이트 자체가 이 모달이다
+function closeAuth(){
+  if(locked) return;
+  document.getElementById('authModal').hidden = true;
+}
+let locked = false;
+async function lockToLogin(){
+  locked = true;
+  document.body.classList.add('locked');
+  document.getElementById('gateBrand').hidden = false;
+  document.getElementById('authClose').hidden = true;
+  await openAuth();
+}
+function unlock(){
+  locked = false;
+  document.body.classList.remove('locked');
+  document.getElementById('gateBrand').hidden = true;
+  document.getElementById('authClose').hidden = false;
+  document.getElementById('authModal').hidden = true;
+}
+
+/* ---------- 계정 설정 (서버 보관) ----------
+   A/B 선택·즐겨찾기·알림 같은 값은 원래 브라우저에만 있어 기기를 바꾸면 사라졌다.
+   계정에 붙여 두고 변경이 멈춘 뒤 한 번만 올린다(입력 중 매 글자 저장 방지). */
+let prefsReady = false, prefsTimer = null;
+function collectPrefs(){
+  const feeEl = document.getElementById('swapFee');
+  return {
+    quote: state.quote, selA: state.selA, selB: state.selB, detail: state.detail,
+    favorites: [...state.favorites],
+    theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+    swap: { qty: state.swapQty, dir: state.swapDir, pct: state.swapPct, fee: feeEl ? feeEl.checked : true },
+    round: { ratio: state.roundRatio },
+    periods: { chart: state.chartPeriod, hist: state.histPeriod },
+    notifCfg: state.notifCfg,
+    alerts: state.alerts.map(a=>({ id:a.id, market:a.market, op:a.op, price:a.price,
+                                   repeat:!!a.repeat, fired:!!a.fired, disabled:!!a.disabled })),
+  };
+}
+function savePrefs(){
+  // 복원이 끝나기 전에 저장하면 방금 불러온 값을 초기값으로 덮어쓴다
+  if(!prefsReady || !auth.token || !API_READY) return;
+  clearTimeout(prefsTimer);
+  prefsTimer = setTimeout(()=>{
+    api('/api/prefs', { method:'PUT', body:{ prefs: collectPrefs() } }).catch(()=>{});
+  }, 800);
+}
+function applyPrefsEarly(p){
+  if(!p) return;
+  if(p.theme === 'dark' || p.theme === 'light'){
+    document.documentElement.dataset.theme = p.theme;
+    localStorage.setItem('coin_theme', p.theme);
+  }
+  if(Array.isArray(p.favorites)) state.favorites = new Set(p.favorites);
+  if(p.notifCfg && typeof p.notifCfg === 'object') state.notifCfg = Object.assign(loadCfg(), p.notifCfg);
+  if(Array.isArray(p.alerts)) state.alerts = p.alerts;
+  if(p.quote && state.byQuote[p.quote] && state.byQuote[p.quote].length) state.quote = p.quote;
+  if(p.periods){
+    if(['1D','1W','1M'].includes(p.periods.chart)) state.chartPeriod = p.periods.chart;
+    if(['1D','1W','1M'].includes(p.periods.hist))  state.histPeriod  = p.periods.hist;
+  }
+  document.querySelectorAll('#chartSeg button').forEach(b=> b.classList.toggle('active', b.dataset.p === state.chartPeriod));
+  document.querySelectorAll('#histTabs button').forEach(b=> b.classList.toggle('on', b.dataset.p === state.histPeriod));
+}
+function applyPrefsLate(p){
+  if(!p) return;
+  // A/B는 마켓 목록이 채워진 뒤라야 select에 값이 들어간다.
+  // 저장 이후 상장폐지되거나 마켓이 바뀐 코인은 조용히 버린다.
+  const usable = mk => mk && state.meta[mk] && state.meta[mk].quote === state.quote;
+  if(usable(p.selA)){ state.selA = p.selA; document.getElementById('selA').value = p.selA; }
+  if(usable(p.selB)){ state.selB = p.selB; document.getElementById('selB').value = p.selB; }
+  if(usable(p.detail)) state.detail = p.detail;
+  if(p.swap){
+    if(p.swap.dir === 'ab' || p.swap.dir === 'ba') state.swapDir = p.swap.dir;
+    if([25,50,75,100].includes(p.swap.pct)) state.swapPct = p.swap.pct;
+    const feeEl = document.getElementById('swapFee');
+    if(feeEl && typeof p.swap.fee === 'boolean') feeEl.checked = p.swap.fee;
+    if(typeof p.swap.qty === 'string'){ state.swapQty = p.swap.qty; document.getElementById('swapQty').value = p.swap.qty; }
+  }
+  if(p.round && typeof p.round.ratio === 'string'){
+    state.roundRatio = p.round.ratio;
+    document.getElementById('roundRatio').value = p.round.ratio;
+  }
+  updateCompare();
+  if(state.selA && state.selB) loadPairHistory();
+}
 
 async function submitAuth(e){
   e.preventDefault();
@@ -1647,9 +1746,12 @@ async function submitAuth(e){
                         { method:'POST', body:{ username, password } });
     setAuth(r.token, r.username, r);
     if(r.mustChangePw){                       // 임시 비밀번호면 바로 변경 화면으로
+      unlock();
+      document.getElementById('authModal').hidden = false;
       openAccount();
+      await boot();
     }else{
-      closeAuth();
+      await boot();                           // 게이트를 열고 시세를 부르기 시작한다
       toastSimple(`${r.username}님, 로그인되었습니다`);
     }
   }catch(err){
@@ -1658,8 +1760,9 @@ async function submitAuth(e){
 }
 async function logout(){
   try{ await api('/api/auth/logout', { method:'POST' }); }catch(_){ /* 만료된 세션이면 무시 */ }
-  setAuth(null, null);
-  toastSimple('로그아웃되었습니다');
+  localStorage.removeItem(TOKEN_KEY);
+  // 다시 게이트로 돌아간다. 남의 계정 설정·기록이 화면에 남지 않도록 통째로 새로 시작한다.
+  location.reload();
 }
 async function restoreSession(){
   if(!API_READY || !auth.token){ renderAcct(); return; }
@@ -2000,6 +2103,7 @@ function switchQuote(q){
   // WS 재구독
   if(ws && ws.readyState===1) subscribe();
   updateCompare();
+  savePrefs();
 }
 
 /* ---------- 탭 상태 (원화/BTC/USDT/관심 상호배타) ---------- */
@@ -2044,28 +2148,31 @@ function bindUI(){
     });
   });
   // A/B 비교 셀렉트 (드롭다운 전용 — 행 클릭과 분리)
-  document.getElementById('selA').addEventListener('change', e=>{ state.selA = e.target.value||null; updateCompare(); loadPairHistory(); });
-  document.getElementById('selB').addEventListener('change', e=>{ state.selB = e.target.value||null; updateCompare(); loadPairHistory(); });
+  document.getElementById('selA').addEventListener('change', e=>{ state.selA = e.target.value||null; updateCompare(); loadPairHistory(); savePrefs(); });
+  document.getElementById('selB').addEventListener('change', e=>{ state.selB = e.target.value||null; updateCompare(); loadPairHistory(); savePrefs(); });
   document.getElementById('histTabs').addEventListener('click', e=>{
     const b = e.target.closest('button[data-p]'); if(!b) return;
     state.histPeriod = b.dataset.p;
     document.querySelectorAll('#histTabs button').forEach(x=>x.classList.toggle('on', x===b));
     loadPairHistory();
+    savePrefs();
   });
   // 교환 시뮬레이션 — 값만 갱신하므로 입력 중 포커스가 끊기지 않는다
-  document.getElementById('swapQty').addEventListener('input', e=>{ state.swapQty = e.target.value; updateSwap(); });
-  document.getElementById('swapFee').addEventListener('change', updateSwap);
+  document.getElementById('swapQty').addEventListener('input', e=>{ state.swapQty = e.target.value; updateSwap(); savePrefs(); });
+  document.getElementById('swapFee').addEventListener('change', ()=>{ updateSwap(); savePrefs(); });
   document.getElementById('swapDir').addEventListener('click', ()=>{
     state.swapDir = state.swapDir === 'ab' ? 'ba' : 'ab';
     // 수량·교환비 모두 단위가 뒤집히므로 리셋
     state.swapQty = ''; document.getElementById('swapQty').value = '';
     state.roundRatio = ''; document.getElementById('roundRatio').value = '';
     updateSwap();
+    savePrefs();
   });
   document.getElementById('swapPcts').addEventListener('click', e=>{
     const b = e.target.closest('button[data-pct]'); if(!b) return;
     state.swapPct = +b.dataset.pct;
     updateSwap();
+    savePrefs();
   });
   // 계정
   document.getElementById('acctBtn').addEventListener('click', ()=> auth.username ? openAccount() : openAuth());
@@ -2087,7 +2194,7 @@ function bindUI(){
     try{ await api('/api/trades/' + b.dataset.id, { method:'DELETE' }); loadTrades(); }
     catch(err){ toastSimple(err.message); }
   });
-  document.getElementById('roundRatio').addEventListener('input', e=>{ state.roundRatio = e.target.value; updateSwap(); });
+  document.getElementById('roundRatio').addEventListener('input', e=>{ state.roundRatio = e.target.value; updateSwap(); savePrefs(); });
   document.getElementById('roundPcts').addEventListener('click', e=>{
     const b = e.target.closest('button[data-d]'); if(!b || !roundCtx) return;
     const { r1, k } = roundCtx;
@@ -2096,6 +2203,7 @@ function bindUI(){
     state.roundRatio = plainNum(r2);
     document.getElementById('roundRatio').value = state.roundRatio;
     updateSwap();
+    savePrefs();
   });
   // 차트 기간 세그먼트 (1일/1주/1개월)
   document.getElementById('chartSeg').addEventListener('click', e=>{
@@ -2104,6 +2212,7 @@ function bindUI(){
     state.chartPeriod = p;
     document.querySelectorAll('#chartSeg button').forEach(x=>x.classList.toggle('active', x===b));
     loadChart();   // 기간 변경 시에만 fetch
+    savePrefs();
   });
   // 차트 hover 툴팁
   const cb = document.getElementById('chartBody');
@@ -2136,6 +2245,7 @@ function bindUI(){
     const dark = document.documentElement.dataset.theme !== 'dark';
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     localStorage.setItem('coin_theme', dark ? 'dark' : 'light');
+    savePrefs();
   });
 }
 
@@ -2173,12 +2283,16 @@ function loadCfg(){
     return Object.assign(d, s);
   }catch(_){ return d; }
 }
-function saveCfg(){ try{ localStorage.setItem('coin_notif_cfg', JSON.stringify(state.notifCfg)); }catch(_){} }
+function saveCfg(){
+  try{ localStorage.setItem('coin_notif_cfg', JSON.stringify(state.notifCfg)); }catch(_){}
+  savePrefs();
+}
 function loadAlerts(){ try{ return JSON.parse(localStorage.getItem('coin_alerts')||'[]'); }catch(_){ return []; } }
 function saveAlerts(){
   try{ localStorage.setItem('coin_alerts', JSON.stringify(state.alerts.map(a=>({
     id:a.id, market:a.market, op:a.op, price:a.price, repeat:!!a.repeat, fired:!!a.fired, disabled:!!a.disabled
   })))); }catch(_){}
+  savePrefs();
 }
 
 /* ---- 감지 파라미터 ---- */
@@ -2456,19 +2570,27 @@ function renderSettings(){
 }
 
 /* ---------- 부트스트랩 (계약 유지) ---------- */
-(async function init(){
-  state.notifCfg = loadCfg();
-  state.alerts = loadAlerts();
-  state.startTs = Date.now();
-  bindUI();
+let booted = false;
+async function boot(){
+  if(booted) return;
+  booted = true;
+  unlock();
+  state.startTs = Date.now();          // 워밍업은 시세가 흐르기 시작한 시점부터
   try{
     await loadMarkets();
   }catch(e){
     document.getElementById('emptyMsg').style.display='block';
     document.getElementById('emptyMsg').textContent='시세를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.';
-    restoreSession();   // 시세가 막혀도 로그인 상태와 기록은 살아 있어야 한다
+    booted = false;                    // 재시도 여지를 남긴다
     return;
   }
+  // 계정에 저장해 둔 설정을 목록 구성 전에 반영한다 (마켓 탭·즐겨찾기·테마)
+  let prefs = null;
+  if(API_READY && auth.token){
+    try{ prefs = (await api('/api/prefs')).prefs; }catch(_){}
+  }
+  applyPrefsEarly(prefs);
+  refreshTabs();
   fillCompareSelects();
   buildRows();
   // 실시간 스트림을 가장 먼저 확보한다.
@@ -2480,6 +2602,7 @@ function renderSettings(){
   await loadSnapshot(state.quote);
   for(const mk of state.byQuote[state.quote]) updateRow(mk, false);
   state.detail = defaultDetail(state.quote);   // 스냅샷 이후 = 거래대금 최대
+  applyPrefsLate(prefs);                       // A/B·교환 설정은 시세가 있어야 계산된다
   refreshDetailHighlight();
   reorder();
   updateDetail();
@@ -2491,7 +2614,20 @@ function renderSettings(){
   renderAlertList();
   renderSettings();
   updateBell();
-  restoreSession();   // 저장된 토큰이 살아 있으면 로그인 상태로 복원
+  // 여기부터의 변경만 서버에 올린다 (복원 값을 되쓰기하지 않도록)
+  prefsReady = true;
+  if(API_READY && auth.token && !prefs) savePrefs();   // 첫 로그인 — 브라우저에 있던 값을 계정으로 옮긴다
+}
+
+(async function init(){
+  state.notifCfg = loadCfg();
+  state.alerts = loadAlerts();
+  state.startTs = Date.now();
+  bindUI();
+  if(!API_READY){ await boot(); return; }   // 계정 서버가 없으면 게이트도 없다
+  await restoreSession();                   // 토큰이 살아 있으면 로그인 상태로 복원
+  if(auth.token) await boot();
+  else await lockToLogin();
 })();
 </script>
 </body>

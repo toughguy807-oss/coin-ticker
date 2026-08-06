@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user    ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
+-- 사용자 설정 (A/B 선택·즐겨찾기·알림·테마 등). 항목이 늘어나는 성격이라 JSON 한 덩어리.
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  data       TEXT    NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 -- 한 건 = "A를 얼마 내고 B를 얼마 받았다" 한 번의 교환
 CREATE TABLE IF NOT EXISTS trades (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
