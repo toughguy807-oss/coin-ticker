@@ -201,6 +201,35 @@
   .hr-info{display:flex; justify-content:space-between; gap:8px; font-size:var(--fs-xs); color:var(--muted)}
   .hr-info b{color:var(--text)}
 
+  /* ---- 구간별 시세 (기간별 추이 하위) ---- */
+  .hist-series{margin-top:14px; border-top:1px dashed var(--line); padding-top:10px}
+  .hs-toggle{display:flex; align-items:center; gap:6px; background:none; border:0; padding:2px 0 8px;
+    color:var(--muted); font-size:var(--fs-xs); font-weight:800; cursor:pointer}
+  .hs-toggle:hover{color:var(--text)}
+  .hs-caret{display:inline-block; transition:transform .18s ease; font-size:var(--fs-2xs)}
+  .hs-toggle[aria-expanded="false"] .hs-caret{transform:rotate(-90deg)}
+  .hs-count{color:var(--muted-2); font-weight:700}
+  .hs-wrap{max-height:264px; overflow:auto; border:1px solid var(--line-weak); border-radius:6px}
+  .hs-wrap[hidden]{display:none}
+  .hs-tab{width:100%; border-collapse:collapse; font-size:var(--fs-xs)}
+  .hs-tab th{position:sticky; top:0; z-index:1; background:var(--panel); color:var(--muted); font-weight:700;
+    text-align:right; padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap}
+  .hs-tab th:first-child{text-align:left}
+  .hs-tab td{text-align:right; padding:6px 10px; border-bottom:1px solid var(--line-weak);
+    font-family:var(--mono,var(--sans)); font-weight:700; white-space:nowrap}
+  .hs-tab td:first-child{text-align:left; color:var(--muted); font-weight:700; font-family:var(--sans)}
+  .hs-tab tbody tr:last-child td{border-bottom:0}
+  .hs-tab tbody tr:hover{background:var(--panel-2)}
+  /* 지금이 구간의 어디쯤인지가 핵심이므로 교환비 극단값을 눈에 띄게 둔다 */
+  .hs-tab tr.hi{background:rgba(210,79,69,.07)}
+  .hs-tab tr.lo{background:rgba(18,97,196,.07)}
+  :root[data-theme="dark"] .hs-tab tr.hi{background:rgba(232,83,90,.12)}
+  :root[data-theme="dark"] .hs-tab tr.lo{background:rgba(74,138,244,.12)}
+  .hs-mark{font-size:var(--fs-2xs); font-weight:800; margin-left:5px; padding:1px 5px; border-radius:3px;
+    font-family:var(--sans)}
+  .hs-mark.hi{background:var(--up); color:#fff}
+  .hs-mark.lo{background:var(--down); color:#fff}
+
   /* ---- 교환 시뮬레이션 ---- */
   .swap{border-top:1px solid var(--line-weak); padding:14px 20px 18px}
   .swap-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; flex-wrap:wrap}
@@ -713,6 +742,23 @@
             </div>
           </div>
         </div>
+
+        <!-- 구간별 시세 — 요약(시작/현재)만으론 중간이 어떻게 움직였는지 알 수 없다 -->
+        <div class="hist-series" id="histSeries" hidden>
+          <button type="button" class="hs-toggle" id="histToggle" aria-expanded="true">
+            <span class="hs-caret">▾</span>구간별 시세
+            <span class="hs-count" id="histCount"></span>
+          </button>
+          <div class="hs-wrap" id="histSeriesWrap">
+            <table class="hs-tab">
+              <thead><tr>
+                <th>시각</th><th id="hsColA">A</th><th id="hsColB">B</th>
+                <th>교환비</th><th>직전 대비</th>
+              </tr></thead>
+              <tbody id="histSeriesBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- 교환 시뮬레이션 — A/B를 실제로 갈아탄다면 몇 개가 되는지 -->
@@ -1023,6 +1069,7 @@ const state = {
   swapQty: '', swapDir: 'ab', swapPct: 100,   // 교환 시뮬레이션: 보유 수량 / 방향(ab = A를 팔아 B를 삼) / 교환 비율
   roundRatio: '',                             // 왕복: 되돌아올 때의 교환비
   histPeriod: '1D',                           // 기간별 추이 구간
+  histOpen: true,                             // 구간별 시세표 펼침 여부
   detail: null,      // 상세 패널에 표시할 마켓 (UI 전용 — 행 클릭)
   chartPeriod: '1D', // 1D | 1W | 1M
   // --- 알림/이상거래 감지 ---
@@ -1681,7 +1728,7 @@ function collectPrefs(){
     theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
     swap: { qty: state.swapQty, dir: state.swapDir, pct: state.swapPct, fee: feeEl ? feeEl.checked : true },
     round: { ratio: state.roundRatio },
-    periods: { chart: state.chartPeriod, hist: state.histPeriod },
+    periods: { chart: state.chartPeriod, hist: state.histPeriod, histOpen: state.histOpen },
     notifCfg: state.notifCfg,
     alerts: state.alerts.map(a=>({ id:a.id, market:a.market, op:a.op, price:a.price,
                                    repeat:!!a.repeat, fired:!!a.fired, disabled:!!a.disabled })),
@@ -1708,9 +1755,11 @@ function applyPrefsEarly(p){
   if(p.periods){
     if(['1D','1W','1M'].includes(p.periods.chart)) state.chartPeriod = p.periods.chart;
     if(['1D','1W','1M'].includes(p.periods.hist))  state.histPeriod  = p.periods.hist;
+    if(typeof p.periods.histOpen === 'boolean')    state.histOpen    = p.periods.histOpen;
   }
   document.querySelectorAll('#chartSeg button').forEach(b=> b.classList.toggle('active', b.dataset.p === state.chartPeriod));
   document.querySelectorAll('#histTabs button').forEach(b=> b.classList.toggle('on', b.dataset.p === state.histPeriod));
+  applyHistOpen();
 }
 function applyPrefsLate(p){
   if(!p) return;
@@ -1903,7 +1952,7 @@ async function loadPairHistory(){
   const empty = document.getElementById('histEmpty'), body = document.getElementById('histBody');
   if(!empty) return;
   if(!a || !b){
-    histData = null; body.hidden = true; empty.hidden = false;
+    histData = null; body.hidden = true; empty.hidden = false; hideHistSeries();
     empty.textContent = 'A·B를 모두 고르면 기간별 격차를 계산합니다';
     return;
   }
@@ -1924,7 +1973,8 @@ async function loadPairHistory(){
     const series = [];
     for(const c of ca){                                  // 거래가 없어 빠진 구간은 제외
       const pb = mapB.get(c.candle_date_time_utc);
-      if(pb > 0) series.push({ a:c.trade_price, b:pb, r:c.trade_price/pb });
+      // 구간 시각도 함께 담는다 — 요약(시작/현재) 말고 구간별 표를 그리려면 필요하다
+      if(pb > 0) series.push({ t:c.candle_date_time_kst, a:c.trade_price, b:pb, r:c.trade_price/pb });
     }
     series.reverse();                                    // 최신순 → 과거→현재
     if(series.length < 2) throw new Error('empty');
@@ -1932,7 +1982,7 @@ async function loadPairHistory(){
     renderHist();
   }catch(e){
     if(rid !== histReqId) return;
-    histData = null; body.hidden = true; empty.hidden = false;
+    histData = null; body.hidden = true; empty.hidden = false; hideHistSeries();
     empty.textContent = '기간 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
   }
 }
@@ -1966,6 +2016,58 @@ function renderHist(){
   hp.textContent = `현재 ${fmtQty(nowR)} · 기간 내 ${pos.toFixed(0)}% 지점`
                  + (pos>=70 ? ' — A가 비싼 편' : pos<=30 ? ' — A가 싼 편' : '');
   hp.className = 'hr-pos ' + (pos>=70 ? 'up' : pos<=30 ? 'down' : '');
+  renderHistSeries(ma, mb);
+}
+
+/* ---------- 구간별 시세표 ----------
+   renderHist()는 틱마다 불린다. 표를 매번 새로 그리면 스크롤 위치가 튀고 낭비이므로
+   캔들이 바뀐 경우(코인 쌍·기간 변경)에만 다시 그린다. */
+let histTableKey = null;
+function renderHistSeries(ma, mb){
+  const box = document.getElementById('histSeries');
+  if(!box || !histData) return;
+  box.hidden = false;
+  if(histTableKey === histData.key) return;
+  histTableKey = histData.key;
+
+  const s = histData.series;
+  const rs = s.map(x => x.r);
+  const hi = Math.max(...rs), lo = Math.min(...rs);
+  document.getElementById('hsColA').textContent = ma.base;
+  document.getElementById('hsColB').textContent = mb.base;
+  document.getElementById('histCount').textContent = `${s.length}구간 · 최신순`;
+
+  const rows = [];
+  for(let i = s.length - 1; i >= 0; i--){        // 최신이 위로
+    const x = s[i], prev = s[i-1];
+    const mark = x.r === hi ? '<span class="hs-mark hi">최고</span>'
+               : x.r === lo ? '<span class="hs-mark lo">최저</span>' : '';
+    let delta = '<span class="muted">—</span>';   // 가장 오래된 구간은 비교 대상이 없다
+    if(prev && prev.r > 0){
+      const d = (x.r / prev.r - 1) * 100;
+      delta = `<span class="${dirClass(d)}">${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}%</span>`;
+    }
+    rows.push(`<tr class="${x.r === hi ? 'hi' : x.r === lo ? 'lo' : ''}">
+      <td>${fmtCandleTime(x.t, state.histPeriod)}</td>
+      <td>${fmtPrice(x.a, state.quote)}</td>
+      <td>${fmtPrice(x.b, state.quote)}</td>
+      <td>${fmtQty(x.r)}${mark}</td>
+      <td>${delta}</td>
+    </tr>`);
+  }
+  document.getElementById('histSeriesBody').innerHTML = rows.join('');
+}
+function hideHistSeries(){
+  histTableKey = null;
+  const box = document.getElementById('histSeries');
+  if(box) box.hidden = true;
+}
+function applyHistOpen(){
+  const btn = document.getElementById('histToggle');
+  const wrap = document.getElementById('histSeriesWrap');
+  if(!btn || !wrap) return;
+  btn.setAttribute('aria-expanded', state.histOpen ? 'true' : 'false');
+  wrap.hidden = !state.histOpen;
 }
 
 /* ---------- 교환 시뮬레이션 ----------
@@ -2155,6 +2257,11 @@ function bindUI(){
     state.histPeriod = b.dataset.p;
     document.querySelectorAll('#histTabs button').forEach(x=>x.classList.toggle('on', x===b));
     loadPairHistory();
+    savePrefs();
+  });
+  document.getElementById('histToggle').addEventListener('click', ()=>{
+    state.histOpen = !state.histOpen;
+    applyHistOpen();
     savePrefs();
   });
   // 교환 시뮬레이션 — 값만 갱신하므로 입력 중 포커스가 끊기지 않는다
